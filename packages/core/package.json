@@ -1,0 +1,109 @@
+{
+  "name": "yuque-editor-core",
+  "description": "Yuque/Lake editor core with offline assets",
+  "version": "0.0.5",
+  "license": "MIT",
+  "keywords": [
+    "yuque",
+    "lake",
+    "editor",
+    "offline",
+    "wysiwyg"
+  ],
+  "packageManager": "pnpm@9.15.5",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/**/*.cjs",
+    "dist/**/*.mjs",
+    "dist/**/*.d.ts",
+    "dist/yuque-assets",
+    "!dist/**/*.map",
+    "!dist/esm",
+    "!dist/cjs",
+    "!dist/types",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    },
+    "./assets": {
+      "types": "./dist/assets.d.ts",
+      "import": "./dist/assets.mjs",
+      "require": "./dist/assets.cjs"
+    },
+    "./editor": {
+      "types": "./dist/editor.d.ts",
+      "import": "./dist/editor.mjs",
+      "require": "./dist/editor.cjs"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.mjs",
+      "require": "./dist/react.cjs"
+    },
+    "./vue": {
+      "types": "./dist/vue.d.ts",
+      "import": "./dist/vue.mjs",
+      "require": "./dist/vue.cjs"
+    },
+    "./vite-assets": {
+      "types": "./dist/vite-assets.d.ts",
+      "import": "./dist/vite-assets.mjs",
+      "require": "./dist/vite-assets.cjs"
+    }
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build:types": "tsc -p tsconfig.types.json",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "build:esm": "tsc -p tsconfig.esm.json",
+    "build": "pnpm run clean && pnpm run build:types && pnpm run build:cjs && pnpm run build:esm && node scripts/postbuild.cjs",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "prepack": "pnpm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.37",
+    "@types/react": "^18.2.79",
+    "@types/react-dom": "^18.2.25",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "typescript": "^5.9.3",
+    "vue": "^3.5.13"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18",
+    "vue": ">=3"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
+    "vue": {
+      "optional": true
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zhangzhengyang27/yuque-editor-core.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zhangzhengyang27/yuque-editor-core/issues"
+  },
+  "homepage": "https://github.com/zhangzhengyang27/yuque-editor-core#readme",
+  "publishConfig": {
+    "access": "public"
+  }
+}

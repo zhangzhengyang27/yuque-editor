@@ -1,0 +1,13 @@
+{
+  "name": "yuque-editor",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Yuque/Lake editor monorepo",
+  "packageManager": "pnpm@9.15.5",
+  "scripts": {
+    "build": "pnpm --filter yuque-editor-core run build",
+    "dev:react": "pnpm --filter @yuque-editor/react-example dev",
+    "dev:vue": "pnpm --filter @yuque-editor/vue-example dev",
+    "clean": "pnpm --filter '*' run clean"
+  }
+}
