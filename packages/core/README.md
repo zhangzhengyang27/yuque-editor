@@ -43,12 +43,20 @@ const ref = await createYuqueEditor({
 ### React
 
 ```tsx
-import React from "react"
-import YuqueEditor from "yuque-editor-core/react"
+import { YuqueRichText } from "yuque-editor-core/react"
+import type { YuqueEditorRef } from "yuque-editor-core/editor"
 
 export default function App() {
   const [value, setValue] = React.useState("<p>Hello</p>")
-  return <YuqueEditor value={value} scheme="text/html" onChange={setValue} />
+  const editorRef = React.useRef<YuqueEditorRef>(null)
+
+  return (
+    <YuqueRichText
+      ref={editorRef}
+      value={value}
+      onChange={setValue}
+    />
+  )
 }
 ```
 
@@ -56,17 +64,19 @@ export default function App() {
 
 ```vue
 <template>
-  <YuqueEditor
+  <YuqueRichText
+    ref="editorRef"
     :value="value"
-    scheme="text/html"
     @change="onChange"
   />
 </template>
 
 <script setup lang="ts">
 import { ref } from "vue"
-import YuqueEditor from "yuque-editor-core/vue"
+import { YuqueRichText } from "yuque-editor-core/vue"
+import type { YuqueEditorRef } from "yuque-editor-core/editor"
 
+const editorRef = ref<YuqueEditorRef | null>(null)
 const value = ref("<p>Hello</p>")
 
 function onChange(next: string) {
@@ -80,12 +90,11 @@ function onChange(next: string) {
 React：通过 `onError` 回调监听初始化失败或内部异常。
 
 ```tsx
-<YuqueEditor
+<YuqueRichText
   value={value}
-  scheme="text/html"
   onChange={setValue}
   onError={(error) => {
-    console.error("[YuqueEditor] 初始化/运行异常:", error)
+    console.error("[YuqueRichText] 初始化/运行异常:", error)
   }}
 />
 ```
@@ -93,9 +102,8 @@ React：通过 `onError` 回调监听初始化失败或内部异常。
 Vue 3：通过 `@error` 事件监听。
 
 ```vue
-<YuqueEditor
+<YuqueRichText
   :value="value"
-  scheme="text/html"
   @change="onChange"
   @error="onError"
 />
@@ -103,17 +111,23 @@ Vue 3：通过 `@error` 事件监听。
 
 ### 图片 / 视频上传
 
-通过 `uploadImage` / `uploadVideo` 钩子接入自定义上传逻辑，支持 `base64` 与 `File` 两类输入：
+通过 `uploadImage` / `uploadVideo` 钩子接入自定义上传逻辑，支持 `url`、`file`、`base64` 三类输入：
 
-```ts
-<YuqueEditor
+```tsx
+<YuqueRichText
   value={value}
   onChange={setValue}
-  uploadImage={async ({ data }) => {
+  uploadImage={async ({ type, data }) => {
+    // type: "url" | "file" | "base64"
     const formData = new FormData()
-    formData.append("file", data instanceof File ? data : base64ToFile(data))
+    if (type === "file") {
+      formData.append("file", data as File)
+    } else {
+      // base64 string 需要自行转换或上传
+    }
     const res = await fetch("/api/upload", { method: "POST", body: formData })
     const json = await res.json()
+    // 返回 url（必填）、size（必填）、filename（可选）、cover（视频封面，可选）
     return { url: json.url, size: json.size, filename: json.filename }
   }}
 />
@@ -174,17 +188,49 @@ editorRef.current?.destroy()
 
 | 方法 | 说明 |
 |------|------|
+| `appendContent(html, breakLine?)` | 在选区插入内容，`breakLine` 为 `true` 时先插入空行 |
 | `setContent(content, scheme?)` | 写入内容并同步文档格式 |
 | `getContent(scheme?)` | 按指定格式读取当前文档 |
-| `appendContent(html, breakLine?)` | 在选区插入内容 |
 | `isEmpty()` | 判断文档是否为空 |
 | `getSummaryContent()` | 获取纯文本摘要 |
 | `wordCount()` | 字数统计（中文按字符、英文按单词计数） |
 | `focusToStart(offset?)` | 光标移至文档起始位置 |
 | `insertBreakLine()` | 插入空行 |
 | `destroy()` | 销毁实例、解绑事件并清理 DOM |
+| `undo()` | 撤销上一个命令 |
+| `redo()` | 重做上一个撤销的命令 |
+| `insertText(text)` | 在当前选区插入普通文本 |
+| `setBold(value?)` | 切换选中文本的加粗状态 |
+| `setItalic(value?)` | 切换选中文本的斜体状态 |
+| `setUnderline(value?)` | 切换选中文本的下划线状态 |
+| `setStrikethrough(value?)` | 切换选中文本的中划线状态 |
+| `setColor(color)` | 设置选中文本的颜色（支持渐变色） |
+| `setBgColor(color)` | 设置选中文本的背景颜色 |
+| `clearColor()` | 清除文本前景色 |
+| `clearBgColor()` | 清除文本背景颜色 |
+| `setAlignment(value)` | 设置段落对齐方式，可选值：`left` / `right` / `center` / `justify` / `distributed` |
+| `setParagraphStyle(style)` | 设置段落样式，可选值：`p` / `h1` ~ `h6` |
+| `setFontsize(size)` | 设置字号，可选值：`12, 13, 14, 15, 16, 19, 22, 24, 29, 32, 40` |
+| `indent()` | 增加缩进 |
+| `outdent()` | 减少缩进 |
+| `clearFormat()` | 清除选区的格式 |
+| `selectAll()` | 全选当前文档 |
+| `getWordCount()` | `wordCount()` 的别名 |
 
 > `destroy()` 仅移除编辑器自身的 DOM 节点，不会清空宿主容器的其他内容。
+
+### 事件回调
+
+| 事件 | 触发时机 |
+|------|---------|
+| `onChange` | 文档内容变化（已内置去重，不会因自身 setContent 重复触发） |
+| `onLoad` | 编辑器初始化完成 |
+| `onError` | 初始化失败或内部异常 |
+| `onFocus` | 编辑器获得焦点 |
+| `onBlur` | 编辑器失去焦点 |
+| `onSelectionChange` | 选区发生变化 |
+| `onFocusStatusChange` | 焦点状态变化，`focused` 参数指示是否获得焦点 |
+| `onBeforeDestroy` | 编辑器销毁前触发 |
 
 ## 工具函数导出
 
@@ -248,25 +294,32 @@ sequenceDiagram
 | 配置项 | 类型 | 说明 |
 |--------|------|------|
 | `value` | `string` | 编辑器内容初始值和受控值 |
-| `scheme` | `YuqueDocScheme` | 文档格式，`text/html` 或 `text/markdown` |
+| `scheme` | `YuqueDocScheme` | 文档格式，可选：`text/html` / `text/markdown` / `text/plain` / `text/lake` / `json` |
 | `readOnly` | `boolean` | 只读模式，底层走 `createOpenViewer` |
 | `assets` | `Partial<YuqueEditorAssets>` | 覆盖默认离线资源地址 |
 | `onChange` | `(value: string) => void` | 内容变更回调 |
 | `onLoad` | `() => void` | 编辑器初始化完成回调 |
 | `onError` | `(error: Error) => void` | 错误回调 |
-| `uploadImage` | `EditorUploadHandler` | 图片上传钩子 |
-| `uploadVideo` | `EditorUploadHandler` | 视频上传钩子 |
+| `onFocus` | `() => void` | 编辑器获得焦点时触发 |
+| `onBlur` | `() => void` | 编辑器失去焦点时触发 |
+| `onSelectionChange` | `() => void` | 选区变化时触发 |
+| `onFocusStatusChange` | `(focused: boolean) => void` | 焦点状态变化时触发 |
+| `onBeforeDestroy` | `() => void` | 编辑器销毁前触发 |
+| `uploadImage` | `EditorUploadHandler` | 图片上传钩子，入参 `{ type, data }` |
+| `uploadVideo` | `EditorUploadHandler` | 视频上传钩子，入参 `{ type, data }` |
 | `showToolbar` | `boolean` | 控制工具栏显示，默认 `true` |
 | `showToc` | `boolean` | 控制目录显示 |
 | `paragraphSpacing` | `boolean` | 段落间距（经典排版） |
 | `defaultFontSize` | `number` | 默认字号，默认 `15` |
 | `darkMode` | `boolean` | 暗黑模式 |
+| `disabledToolbarItems` | `string[]` | 禁用指定的工具栏按钮 |
+| `toolbarItems` | `string[]` | 完全自定义工具栏按钮列表 |
 
 ### 常见坑位与排查
 
 - **静态资源 404**：确认站点可访问 `/yuque-assets/*`，并包含 `doc.umd.js`、`kitchen.js` 等核心脚本。
 - **`window.Doc` 未定义**：通常是 `doc.umd.js` 未加载成功，或资源加载顺序被外部脚本打断。
-- **受控模式循环更新**：组件内部已通过 contentHash 对比 + 值相等判断自动抑制多余的 `onChange` 派发，正常使用即可。如仍有问题，检查 `onChange` 回调中是否直接回写了相同值。
+- **受控模式循环更新**：组件内部通过 `lastSetContent` 字符串比对自动抑制多余的 `onChange` 派发，正常使用即可。如仍有问题，检查 `onChange` 回调中是否直接回写了相同值。
 - **切换 `scheme` 后内容异常**：切换格式会重建编辑器实例，确保上层同时更新了对应格式的 `value`。
 - **上传失败**：检查 `uploadImage` / `uploadVideo` 返回值是否包含 `url` 和 `size` 字段。
 - **多实例样式冲突**：资源加载器内置去重机制，同名资源只加载一次。

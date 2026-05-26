@@ -52,9 +52,17 @@ export const YuqueRichText = defineComponent({
     darkMode: {
       type: Boolean,
       required: false
+    },
+    disabledToolbarItems: {
+      type: Array as PropType<string[]>,
+      required: false
+    },
+    toolbarItems: {
+      type: Array as PropType<string[]>,
+      required: false
     }
   },
-  emits: ["change", "load", "error"],
+  emits: ["change", "load", "error", "focus", "blur", "selectionchange", "focusstatuschange", "beforedestroy"],
   setup(props, { emit, expose }) {
     const container = ref<HTMLElement | null>(null)
     let api: YuqueEditorRef | null = null
@@ -73,7 +81,9 @@ export const YuqueRichText = defineComponent({
       showToc: props.showToc,
       paragraphSpacing: props.paragraphSpacing,
       defaultFontSize: props.defaultFontSize,
-      darkMode: props.darkMode
+      darkMode: props.darkMode,
+      disabledToolbarItems: props.disabledToolbarItems,
+      toolbarItems: props.toolbarItems
     }
 
     const configKeys = Object.keys(lastConfig) as (keyof typeof lastConfig)[]
@@ -101,9 +111,16 @@ export const YuqueRichText = defineComponent({
           paragraphSpacing: props.paragraphSpacing,
           defaultFontSize: props.defaultFontSize,
           darkMode: props.darkMode,
+          disabledToolbarItems: props.disabledToolbarItems,
+          toolbarItems: props.toolbarItems,
           onLoad: () => emit("load"),
           onError: (error) => emit("error", error),
-          onChange: (v) => emit("change", v)
+          onChange: (v) => emit("change", v),
+          onFocus: () => emit("focus"),
+          onBlur: () => emit("blur"),
+          onSelectionChange: () => emit("selectionchange"),
+          onFocusStatusChange: (focused) => emit("focusstatuschange", focused),
+          onBeforeDestroy: () => emit("beforedestroy")
         })
 
         if (destroyed || seq !== initSeq) {
@@ -141,12 +158,13 @@ export const YuqueRichText = defineComponent({
         props.showToc,
         props.paragraphSpacing,
         props.defaultFontSize,
-        props.darkMode
+        props.darkMode,
+        props.disabledToolbarItems,
+        props.toolbarItems
       ] as const,
       async () => {
         if (!container.value) return
 
-        // 浅比较：只有配置真正变化时才重建实例
         const nextConfig = {
           scheme: props.scheme,
           readOnly: props.readOnly,
@@ -157,7 +175,9 @@ export const YuqueRichText = defineComponent({
           showToc: props.showToc,
           paragraphSpacing: props.paragraphSpacing,
           defaultFontSize: props.defaultFontSize,
-          darkMode: props.darkMode
+          darkMode: props.darkMode,
+          disabledToolbarItems: props.disabledToolbarItems,
+          toolbarItems: props.toolbarItems
         }
         const changed = configKeys.some(
           (k) => !shallowEqual(lastConfig[k], nextConfig[k])
@@ -211,7 +231,26 @@ export const YuqueRichText = defineComponent({
       destroy() {
         api?.destroy()
         api = null
-      }
+      },
+      undo() { api?.undo() },
+      redo() { api?.redo() },
+      insertText(text: string) { api?.insertText(text) },
+      setBold(value?: boolean) { api?.setBold(value) },
+      setItalic(value?: boolean) { api?.setItalic(value) },
+      setUnderline(value?: boolean) { api?.setUnderline(value) },
+      setStrikethrough(value?: boolean) { api?.setStrikethrough(value) },
+      setColor(color: string) { api?.setColor(color) },
+      setBgColor(color: string) { api?.setBgColor(color) },
+      clearColor() { api?.clearColor() },
+      clearBgColor() { api?.clearBgColor() },
+      setAlignment(value: "left" | "right" | "center" | "justify" | "distributed") { api?.setAlignment(value) },
+      setParagraphStyle(style: "p" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6") { api?.setParagraphStyle(style) },
+      setFontsize(size: number) { api?.setFontsize(size) },
+      indent() { api?.indent() },
+      outdent() { api?.outdent() },
+      clearFormat() { api?.clearFormat() },
+      selectAll() { api?.selectAll() },
+      getWordCount() { return api?.getWordCount() ?? 0 }
     })
 
     return () => h("div", { ref: container })

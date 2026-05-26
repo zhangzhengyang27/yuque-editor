@@ -10,6 +10,11 @@ export interface YuqueRichTextProps extends Omit<
   onChange?: (value: string) => void
   onLoad?: () => void
   onError?: (error: Error) => void
+  onFocus?: () => void
+  onBlur?: () => void
+  onSelectionChange?: () => void
+  onFocusStatusChange?: (focused: boolean) => void
+  onBeforeDestroy?: () => void
 }
 
 /** 从 props 中提取影响编辑器实例重建的配置项 */
@@ -24,7 +29,9 @@ function extractConfig(props: YuqueRichTextProps) {
     showToc: props.showToc,
     paragraphSpacing: props.paragraphSpacing,
     defaultFontSize: props.defaultFontSize,
-    darkMode: props.darkMode
+    darkMode: props.darkMode,
+    disabledToolbarItems: props.disabledToolbarItems,
+    toolbarItems: props.toolbarItems
   }
 }
 
@@ -42,8 +49,6 @@ export const YuqueRichText = forwardRef<YuqueEditorRef, YuqueRichTextProps>(
     const configRef = useRef(extractConfig(props))
 
     useImperativeHandle(ref, () => {
-      // 返回代理对象，延迟检查编辑器是否初始化完成
-      // 避免 React StrictMode 双重渲染导致的"编辑器尚未初始化完成"错误
       const checkReady = () => {
         if (!editorRef.current) {
           throw new Error("YuqueRichText：编辑器尚未初始化完成")
@@ -52,14 +57,33 @@ export const YuqueRichText = forwardRef<YuqueEditorRef, YuqueRichTextProps>(
       }
       return {
         appendContent: (html: string, breakLine?: boolean) => checkReady().appendContent(html, breakLine),
-        setContent: (content: string, type?: any) => checkReady().setContent(content, type),
-        getContent: (type?: any) => checkReady().getContent(type),
+        setContent: (content: string, type?: YuqueDocScheme) => checkReady().setContent(content, type),
+        getContent: (type?: YuqueDocScheme) => checkReady().getContent(type),
         isEmpty: () => checkReady().isEmpty(),
         getSummaryContent: () => checkReady().getSummaryContent(),
         wordCount: () => checkReady().wordCount(),
         focusToStart: (offset?: number) => checkReady().focusToStart(offset),
         insertBreakLine: () => checkReady().insertBreakLine(),
-        destroy: () => checkReady().destroy()
+        destroy: () => checkReady().destroy(),
+        undo: () => checkReady().undo(),
+        redo: () => checkReady().redo(),
+        insertText: (text: string) => checkReady().insertText(text),
+        setBold: (value?: boolean) => checkReady().setBold(value),
+        setItalic: (value?: boolean) => checkReady().setItalic(value),
+        setUnderline: (value?: boolean) => checkReady().setUnderline(value),
+        setStrikethrough: (value?: boolean) => checkReady().setStrikethrough(value),
+        setColor: (color: string) => checkReady().setColor(color),
+        setBgColor: (color: string) => checkReady().setBgColor(color),
+        clearColor: () => checkReady().clearColor(),
+        clearBgColor: () => checkReady().clearBgColor(),
+        setAlignment: (value) => checkReady().setAlignment(value),
+        setParagraphStyle: (style) => checkReady().setParagraphStyle(style),
+        setFontsize: (size: number) => checkReady().setFontsize(size),
+        indent: () => checkReady().indent(),
+        outdent: () => checkReady().outdent(),
+        clearFormat: () => checkReady().clearFormat(),
+        selectAll: () => checkReady().selectAll(),
+        getWordCount: () => checkReady().getWordCount()
       } satisfies YuqueEditorRef
     })
 
@@ -102,6 +126,25 @@ export const YuqueRichText = forwardRef<YuqueEditorRef, YuqueRichTextProps>(
             onChange: (v) => {
               if (!active.current) return
               propsRef.current.onChange?.(v)
+            },
+            onFocus: () => {
+              if (!active.current) return
+              propsRef.current.onFocus?.()
+            },
+            onBlur: () => {
+              if (!active.current) return
+              propsRef.current.onBlur?.()
+            },
+            onSelectionChange: () => {
+              if (!active.current) return
+              propsRef.current.onSelectionChange?.()
+            },
+            onFocusStatusChange: (focused) => {
+              if (!active.current) return
+              propsRef.current.onFocusStatusChange?.(focused)
+            },
+            onBeforeDestroy: () => {
+              propsRef.current.onBeforeDestroy?.()
             }
           })
 
@@ -127,7 +170,7 @@ export const YuqueRichText = forwardRef<YuqueEditorRef, YuqueRichTextProps>(
       }
     // 依赖 extractConfig 提取的配置项，避免每次渲染都重建编辑器
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [props.scheme, props.readOnly, props.assets, props.uploadImage, props.uploadVideo, props.showToolbar, props.showToc, props.paragraphSpacing, props.defaultFontSize, props.darkMode])
+    }, [props.scheme, props.readOnly, props.assets, props.uploadImage, props.uploadVideo, props.showToolbar, props.showToc, props.paragraphSpacing, props.defaultFontSize, props.darkMode, props.disabledToolbarItems, props.toolbarItems])
 
     useEffect(() => {
       const api = editorRef.current

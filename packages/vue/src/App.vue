@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onBeforeUnmount, nextTick, computed } from 'vue'
 import { YuqueRichText } from 'yuque-editor-core/vue'
+import type { YuqueEditorRef, YuqueDocScheme } from 'yuque-editor-core/editor'
 import { CommentManager } from './comment/comment-manager'
 import type { Comment, HighlightSelection } from './comment/types'
 import { DEFAULT_USER } from './comment/utils'
@@ -14,21 +15,21 @@ const INITIAL_VALUE = `<h1>Hello Yuque Editor!</h1>
 <p>这是一个 <strong>Vue 示例</strong>，使用 yuque-editor-core 加载语雀编辑器。</p>
 <h2>功能特性</h2>
 <ul>
-  <li>富文本编辑</li>
-  <li>Markdown 支持</li>
-  <li>工具栏</li>
-  <li>图片上传</li>
+  <li>富文本编辑 · 图片/视频上传</li>
+  <li>工具栏 · 字号 · 对齐</li>
+  <li>undo/redo · 加粗/斜体/下划线</li>
+  <li>字数统计 · 格式切换</li>
 </ul>
 <h2>评论功能</h2>
 <p>选中任意文字，会出现「💬 评论」浮动按钮，点击即可添加评论。</p>
-<p>评论会以黄色高亮标记在文本上，右侧面板可查看所有评论。试试选中这段文字添加评论吧！</p>
 <p>试试编辑上面的内容吧！</p>
 `
 
 const content = ref(INITIAL_VALUE)
 const wordCount = ref(0)
-const editorRef = ref<any>(null)
+const editorRef = ref<YuqueEditorRef | null>(null)
 const editorContainerRef = ref<HTMLDivElement | null>(null)
+const logs = ref<string[]>([])
 
 // --- 评论系统状态 ---
 const comments = ref<Comment[]>([])
@@ -37,19 +38,26 @@ const showPopover = ref(false)
 const popoverAnchor = ref<DOMRect | null>(null)
 const popoverHighlight = ref<HighlightSelection | null>(null)
 let commentManager: CommentManager | null = null
-
-// 评论数量 badge
 const unresolvedCount = computed(() => comments.value.filter(c => !c.resolved).length)
 
-function handleLoad() {
-  console.log('Editor loaded!')
-  wordCount.value = editorRef.value?.wordCount() ?? 0
+// === 日志 ===
+function addLog(msg: string) {
+  const ts = new Date().toLocaleTimeString()
+  logs.value.unshift(`[${ts}] ${msg}`)
+  if (logs.value.length > 50) logs.value.pop()
+}
 
-  // 初始化评论系统
+function clearLogs() { logs.value = [] }
+
+// === 编辑器事件 ===
+function handleLoad() {
+  addLog('Editor loaded!')
+  wordCount.value = editorRef.value?.wordCount() ?? 0
   initCommentSystem()
 }
 
 function handleError(err: Error) {
+  addLog(`ERROR: ${err.message}`)
   console.error('Editor error:', err)
 }
 
@@ -58,24 +66,39 @@ function handleChange(v: string) {
   wordCount.value = editorRef.value?.wordCount() ?? 0
 }
 
-function showSummary() {
+function handleFocus() { addLog('focus') }
+function handleBlur() { addLog('blur') }
+function handleSelectionChange() { addLog('selectionchange') }
+
+// === 辅助方法 ===
+function getSummary() {
   const text = editorRef.value?.getSummaryContent() ?? ''
-  wordCount.value = editorRef.value?.wordCount() ?? 0
-  alert(`摘要内容:\n${text}`)
+  addLog(`summary: "${text.slice(0, 60)}${text.length > 60 ? '…' : ''}"`)
+}
+function checkEmpty() {
+  const empty = editorRef.value?.isEmpty()
+  addLog(`isEmpty: ${empty}`)
 }
 
-function clearContent() {
-  content.value = '<p>已清空内容，重新开始编辑吧！</p>'
+// === execCommand 封装 ===
+function cmd(label: string, fn: () => void) {
+  try {
+    fn()
+    addLog(`exec: ${label}`)
+  } catch (e: any) {
+    addLog(`exec FAIL: ${label} — ${e?.message ?? e}`)
+  }
+}
+function getContent(scheme: YuqueDocScheme) {
+  const v = editorRef.value?.getContent(scheme) ?? ''
+  addLog(`${scheme}: "${v.slice(0, 80)}${v.length > 80 ? '…' : ''}"`)
 }
 
 // ==================== 评论系统 ====================
 
 function initCommentSystem() {
-  // 等待编辑器 DOM 渲染完成
   nextTick(() => {
     if (!editorContainerRef.value) return
-
-    // 找到编辑器内部的文档容器
     const docContainer = editorContainerRef.value.querySelector('.doc-container') as HTMLElement
       || editorContainerRef.value.querySelector('[class*="lake-core"]') as HTMLElement
       || editorContainerRef.value.querySelector('.editor-wrapper') as HTMLElement
@@ -89,7 +112,6 @@ function initCommentSystem() {
       }
     })
 
-    // 监听划词事件 → 显示评论弹窗
     commentManager.on('highlight:add', (event: any) => {
       popoverHighlight.value = event.data.highlight
       popoverAnchor.value = event.data.rangeRect
@@ -98,87 +120,48 @@ function initCommentSystem() {
   })
 }
 
-/** 提交评论（来自弹窗） */
-function handleSubmitComment(content: string) {
-  if (!commentManager) return
-  commentManager.addComment(content, popoverHighlight.value ?? undefined)
+function handleSubmitComment(text: string) {
+  commentManager?.addComment(text, popoverHighlight.value ?? undefined)
   showPopover.value = false
   popoverHighlight.value = null
 }
 
-/** 取消评论 */
 function handleCancelComment() {
   showPopover.value = false
   popoverHighlight.value = null
 }
 
-/** 切换评论面板 */
-function togglePanel() {
-  showPanel.value = !showPanel.value
-}
 
-/** 回复评论 */
 function handleReply(commentId: string, replyContent: string) {
   commentManager?.addReply(commentId, replyContent)
 }
 
-/** 标记已解决 */
-function handleResolve(commentId: string) {
-  commentManager?.resolveComment(commentId)
-}
-
-/** 取消已解决 */
-function handleUnresolve(commentId: string) {
-  commentManager?.unresolveComment(commentId)
-}
-
-/** 删除评论 */
+function handleResolve(commentId: string) { commentManager?.resolveComment(commentId) }
+function handleUnresolve(commentId: string) { commentManager?.unresolveComment(commentId) }
 function handleDelete(commentId: string) {
   if (confirm('确定要删除这条评论吗？')) {
     commentManager?.deleteComment(commentId)
   }
 }
 
-/** 滚动到评论对应的高亮 */
-function handleScrollTo(commentId: string) {
-  commentManager?.scrollToComment(commentId)
-}
-
-/** 评论卡片悬浮联动 */
-function handleCommentHover(commentId: string) {
-  commentManager?.setHoveredComment(commentId)
-}
-
-function handleCommentLeave() {
-  commentManager?.setHoveredComment(null)
-}
-
-/** 面板关闭时清除悬浮状态 */
+function handleScrollTo(commentId: string) { commentManager?.scrollToComment(commentId) }
+function handleCommentHover(commentId: string) { commentManager?.setHoveredComment(commentId) }
+function handleCommentLeave() { commentManager?.setHoveredComment(null) }
 function handlePanelClose() {
   showPanel.value = false
   commentManager?.setHoveredComment(null)
 }
 
-// ==================== 回复编辑器 ====================
+// ==================== Reply Editor ====================
 
 const replyEditorRef = ref<InstanceType<typeof ReplyEditorPanel> | null>(null)
 const replies = ref<Array<{ id: string; content: string; time: Date }>>([])
 
-/** 处理回复提交 */
-function handleReplySubmit(content: string) {
-  const reply = {
-    id: Date.now().toString(),
-    content,
-    time: new Date()
-  }
-  replies.value.push(reply)
-  console.log('收到回复:', reply)
-  
-  // 这里可以调用 API 保存回复
-  // await api.saveReply(reply)
+function handleReplySubmit(text: string) {
+  replies.value.push({ id: Date.now().toString(), content: text, time: new Date() })
+  console.log('收到回复:', text)
 }
 
-// 清理
 onBeforeUnmount(() => {
   commentManager?.destroy()
   commentManager = null
@@ -189,23 +172,126 @@ onBeforeUnmount(() => {
   <div class="app-layout">
     <!-- 主内容区 -->
     <div class="app-main">
-      <div style="max-width: 800px; margin: 0 auto; padding: 24px">
-        <h1 style="text-align: center">Yuque Editor Vue Demo</h1>
+      <div style="max-width: 960px; margin: 0 auto; padding: 20px 16px">
 
+        <h1 style="text-align: center; margin-bottom: 20px">Yuque Editor — Vue Demo</h1>
+
+        <!-- ===== 功能测试面板 ===== -->
+        <div class="test-panels">
+          <!-- 基础操作 -->
+          <div class="test-panel">
+            <div class="panel-title">基础操作</div>
+            <div class="panel-body">
+              <button class="cmd-btn" @click="getSummary">getSummaryContent</button>
+              <button class="cmd-btn" @click="checkEmpty">isEmpty</button>
+              <button class="cmd-btn" @click="wordCount = editorRef?.wordCount() ?? 0; addLog(`wordCount: ${wordCount}`)">wordCount</button>
+              <button class="cmd-btn" @click="content = '<p><strong>通过 setContent 重置的内容</strong></p>'; addLog('setContent: reset')">setContent</button>
+            </div>
+          </div>
+
+          <!-- 撤销/重做 -->
+          <div class="test-panel">
+            <div class="panel-title">撤销 / 重做</div>
+            <div class="panel-body">
+              <button class="cmd-btn" @click="cmd('undo', () => editorRef?.undo())">undo</button>
+              <button class="cmd-btn" @click="cmd('redo', () => editorRef?.redo())">redo</button>
+            </div>
+          </div>
+
+          <!-- 文字格式 -->
+          <div class="test-panel">
+            <div class="panel-title">文字格式</div>
+            <div class="panel-body">
+              <button class="cmd-btn" @click="cmd('bold', () => editorRef?.setBold())">setBold</button>
+              <button class="cmd-btn" @click="cmd('italic', () => editorRef?.setItalic())">setItalic</button>
+              <button class="cmd-btn" @click="cmd('underline', () => editorRef?.setUnderline())">setUnderline</button>
+              <button class="cmd-btn" @click="cmd('strikethrough', () => editorRef?.setStrikethrough())">setStrikethrough</button>
+              <button class="cmd-btn" @click="cmd('clearFormat', () => editorRef?.clearFormat())">clearFormat</button>
+            </div>
+          </div>
+
+          <!-- 颜色 -->
+          <div class="test-panel">
+            <div class="panel-title">颜色</div>
+            <div class="panel-body">
+              <div class="color-row">
+                <button v-for="c in ['#FF6B00','#1677FF','#52C41A','#F5222D','#722ED1','#000000']" :key="c"
+                  :title="c" :style="{ background: c }" class="color-btn"
+                  @click="editorRef?.setColor(c); addLog(`setColor: ${c}`)" />
+                <button class="cmd-btn" @click="cmd('clearColor', () => editorRef?.clearColor())">clearColor</button>
+              </div>
+              <div class="color-row">
+                <button v-for="c in ['#FFEB3B','#E1F5FE','#F3E5F5','#E8F5E9','#FFF3E0']" :key="c"
+                  :title="c" :style="{ background: c }" class="color-btn"
+                  @click="editorRef?.setBgColor(c); addLog(`setBgColor: ${c}`)" />
+              </div>
+            </div>
+          </div>
+
+          <!-- 段落样式 -->
+          <div class="test-panel">
+            <div class="panel-title">段落样式</div>
+            <div class="panel-body">
+              <button v-for="s in ['p','h1','h2','h3','h4']" :key="s" class="cmd-btn"
+                @click="cmd(`style=${s}`, () => editorRef?.setParagraphStyle(s as any))">
+                style: {{ s }}
+              </button>
+            </div>
+          </div>
+
+          <!-- 对齐/缩进 -->
+          <div class="test-panel">
+            <div class="panel-title">对齐 / 缩进</div>
+            <div class="panel-body">
+              <button v-for="a in ['left','center','right','justify']" :key="a" class="cmd-btn"
+                @click="cmd(`alignment=${a}`, () => editorRef?.setAlignment(a as any))">
+                {{ a }}
+              </button>
+              <button class="cmd-btn" @click="cmd('indent', () => editorRef?.indent())">indent</button>
+              <button class="cmd-btn" @click="cmd('outdent', () => editorRef?.outdent())">outdent</button>
+            </div>
+          </div>
+
+          <!-- 字号 -->
+          <div class="test-panel">
+            <div class="panel-title">字号</div>
+            <div class="panel-body">
+              <button v-for="sz in [12,15,18,22,24,29,32]" :key="sz" class="cmd-btn"
+                @click="cmd(`fontsize=${sz}`, () => editorRef?.setFontsize(sz))">
+                {{ sz }}px
+              </button>
+            </div>
+          </div>
+
+          <!-- 焦点/光标 -->
+          <div class="test-panel">
+            <div class="panel-title">焦点 / 光标</div>
+            <div class="panel-body">
+              <button class="cmd-btn" @click="cmd('focusToStart', () => editorRef?.focusToStart())">focusToStart</button>
+              <button class="cmd-btn" @click="cmd('selectAll', () => editorRef?.selectAll())">selectAll</button>
+            </div>
+          </div>
+
+          <!-- 格式切换 -->
+          <div class="test-panel">
+            <div class="panel-title">格式切换 (getContent)</div>
+            <div class="panel-body">
+              <button v-for="s in ['text/html','text/markdown','text/plain','text/lake','json']" :key="s" class="cmd-btn"
+                @click="getContent(s as YuqueDocScheme)">
+                {{ s }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== 编辑器 + 状态栏 ===== -->
         <div class="toolbar">
-          <button @click="showSummary">获取摘要</button>
-          <button @click="clearContent">清空内容</button>
-          <button
-            class="yuque-comment-toggle-btn"
-            :class="{ active: showPanel }"
-            @click="togglePanel"
-          >
-            💬 评论
-            <span v-if="unresolvedCount > 0" class="yuque-comment-badge">
-              {{ unresolvedCount }}
-            </span>
+          <button class="toolbar-btn" @click="showPanel = !showPanel"
+            :class="{ active: showPanel }">
+            💬 评论 <span v-if="unresolvedCount > 0" class="badge">{{ unresolvedCount }}</span>
           </button>
           <span class="word-count">字数: {{ wordCount }}</span>
+          <span class="word-count">长度: {{ content.length }}</span>
         </div>
 
         <div ref="editorContainerRef" class="editor-wrapper">
@@ -216,12 +302,29 @@ onBeforeUnmount(() => {
             @change="handleChange"
             @load="handleLoad"
             @error="handleError"
+            @focus="handleFocus"
+            @blur="handleBlur"
+            @selectionchange="handleSelectionChange"
           />
         </div>
 
+        <!-- ===== 事件日志 ===== -->
+        <div class="log-section">
+          <div class="log-header">
+            <span style="font-size:13px;font-weight:600;color:#ddd">事件日志</span>
+            <button class="cmd-btn" style="font-size:11px;padding:2px 8px" @click="clearLogs">清空</button>
+          </div>
+          <div class="log-box">
+            <div v-if="logs.length === 0" style="color:#555;font-size:12px">操作编辑器，事件日志将显示在这里…</div>
+            <div v-for="(log, i) in logs" :key="i" :style="{ color: i === 0 ? '#4fc3f7' : '#ccc', whiteSpace: 'pre-wrap', wordBreak: 'break-all', lineHeight: 1.6, fontSize: 12 }">
+              {{ log }}
+            </div>
+          </div>
+        </div>
+
         <details class="html-viewer">
-          <summary style="cursor: pointer; color: #666">查看原始 HTML</summary>
-          <pre>{{ content }}</pre>
+          <summary style="cursor:pointer;color:#666;font-size:13px">查看原始 HTML</summary>
+          <pre style="background:#f5f5f5;padding:12px;border-radius:4px;overflow:auto;max-height:200px;font-size:12px">{{ content }}</pre>
         </details>
       </div>
     </div>
@@ -253,7 +356,7 @@ onBeforeUnmount(() => {
   <!-- 底部回复编辑器 -->
   <ReplyEditorPanel
     ref="replyEditorRef"
-    placeholder="输入回复内容，支持富文本格式..."
+    placeholder="输入回复内容，支持富文本格式…"
     @submit="handleReplySubmit"
   />
 </template>
@@ -280,16 +383,81 @@ body {
   margin-right: 380px;
 }
 
-.toolbar {
-  display: flex;
+/* ===== 功能测试面板 ===== */
+.test-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 12px;
   margin-bottom: 16px;
+}
+
+.test-panel {
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.panel-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #f0f0f0;
+  padding-bottom: 5px;
+}
+
+.panel-body {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.cmd-btn {
+  font-size: 12px;
+  padding: 3px 8px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  color: #333;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.cmd-btn:hover {
+  border-color: #1677ff;
+  color: #1677ff;
+}
+
+.color-row {
+  display: flex;
+  gap: 4px;
   align-items: center;
   flex-wrap: wrap;
 }
 
-.toolbar button {
-  padding: 6px 14px;
+.color-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* ===== 编辑器工具栏 ===== */
+.toolbar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.toolbar-btn {
+  padding: 5px 14px;
   font-size: 13px;
   border: 1px solid #d9d9d9;
   border-radius: 6px;
@@ -299,9 +467,27 @@ body {
   transition: all 0.15s;
 }
 
-.toolbar button:hover {
+.toolbar-btn:hover {
   border-color: #1677ff;
   color: #1677ff;
+}
+
+.toolbar-btn.active {
+  border-color: #1677ff;
+  color: #1677ff;
+  background: #e6f4ff;
+}
+
+.badge {
+  display: inline-block;
+  background: #ff4d4f;
+  color: #fff;
+  border-radius: 10px;
+  padding: 0 5px;
+  font-size: 11px;
+  line-height: 16px;
+  min-width: 16px;
+  text-align: center;
 }
 
 .word-count {
@@ -313,10 +499,32 @@ body {
   border: 1px solid #e8e8e8;
   border-radius: 8px;
   overflow: hidden;
+  margin-bottom: 16px;
+}
+
+/* ===== 事件日志 ===== */
+.log-section {
+  margin-bottom: 16px;
+}
+
+.log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.log-box {
+  background: #1e1e1e;
+  border-radius: 6px;
+  padding: 10px 12px;
+  height: 160px;
+  overflow-y: auto;
+  font-family: 'SF Mono', Monaco, Menlo, monospace;
 }
 
 .html-viewer {
-  margin-top: 16px;
+  margin-bottom: 16px;
 }
 
 .html-viewer pre {
@@ -324,7 +532,7 @@ body {
   padding: 12px;
   border-radius: 4px;
   overflow: auto;
-  max-height: 300px;
+  max-height: 200px;
   font-size: 12px;
 }
 

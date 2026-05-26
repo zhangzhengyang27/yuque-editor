@@ -4,18 +4,23 @@ import { localAssets } from "./assets"
  * 语雀编辑器支持的文档格式类型
  * - text/html: 标准 HTML 格式
  * - text/markdown: Markdown 格式
+ * - text/plain: 纯文本格式
+ * - text/lake: 语雀内部 lake 格式
+ * - json: JSON 格式
  */
-export type YuqueDocScheme = "text/html" | "text/markdown"
+export type YuqueDocScheme = "text/html" | "text/markdown" | "text/plain" | "text/lake" | "json"
 
 export interface UploadResult {
   url: string
   size: number
   /** 上传后的文件名（服务端返回） */
   filename?: string
+  /** 视频封面地址（仅视频上传需要） */
+  cover?: string
 }
 
 export interface EditorUploadHandler {
-  (params: { data: string | File }): Promise<UploadResult>
+  (params: { type: "url" | "file" | "base64"; data: string | File }): Promise<UploadResult>
 }
 
 export interface YuqueEditorAssets {
@@ -38,6 +43,11 @@ export interface YuqueEditorOptions {
   onChange?: (value: string) => void
   onLoad?: () => void
   onError?: (error: Error) => void
+  onFocus?: () => void
+  onBlur?: () => void
+  onSelectionChange?: () => void
+  onFocusStatusChange?: (focused: boolean) => void
+  onBeforeDestroy?: () => void
   uploadImage?: EditorUploadHandler
   uploadVideo?: EditorUploadHandler
   showToolbar?: boolean
@@ -45,6 +55,8 @@ export interface YuqueEditorOptions {
   paragraphSpacing?: boolean
   defaultFontSize?: number
   darkMode?: boolean
+  disabledToolbarItems?: string[]
+  toolbarItems?: string[]
 }
 
 export interface YuqueEditorRef {
@@ -57,6 +69,26 @@ export interface YuqueEditorRef {
   focusToStart: (offset?: number) => void
   insertBreakLine: () => void
   destroy: () => void
+  // === execCommand 封装 ===
+  undo: () => void
+  redo: () => void
+  insertText: (text: string) => void
+  setBold: (value?: boolean) => void
+  setItalic: (value?: boolean) => void
+  setUnderline: (value?: boolean) => void
+  setStrikethrough: (value?: boolean) => void
+  setColor: (color: string) => void
+  setBgColor: (color: string) => void
+  clearColor: () => void
+  clearBgColor: () => void
+  setAlignment: (value: "left" | "right" | "center" | "justify" | "distributed") => void
+  setParagraphStyle: (style: "p" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6") => void
+  setFontsize: (size: number) => void
+  indent: () => void
+  outdent: () => void
+  clearFormat: () => void
+  selectAll: () => void
+  getWordCount: () => number
 }
 
 interface ThirdPartyUploadRequest {
@@ -88,16 +120,23 @@ interface ThirdPartyEditorOptions {
   video?: {
     createUploadPromise: (request: ThirdPartyUploadRequest) => Promise<UploadResult>
   }
+  toolbar?: {
+    agentConfig?: {
+      default?: {
+        items?: unknown[]
+      }
+    }
+  }
 }
 
 interface ThirdPartyEditor {
-  on?: (event: string, handler: () => void) => void | (() => void)
+  on?: (event: string, handler: (...args: unknown[]) => void) => void | (() => void)
   setDocument: (type: YuqueDocScheme, content: string) => void
   getDocument: (
     type: YuqueDocScheme,
     options?: { includeMeta?: boolean }
   ) => string
-  execCommand?: (command: string, ...args: unknown[]) => void
+  execCommand?: (command: string, ...args: unknown[]) => unknown
   destroy?: () => void
 }
 
@@ -330,6 +369,8 @@ function stripMarkdown(md: string): string {
 
 function stripByScheme(content: string, scheme: YuqueDocScheme): string {
   if (scheme === "text/markdown") return stripMarkdown(content)
+  if (scheme === "text/plain") return content.trim()
+  // text/lake / json 都走 HTML 降级
   return stripHtml(content)
 }
 
@@ -360,6 +401,14 @@ export async function createYuqueEditor(
   if (options.showToolbar === false) disabledPlugins.push("toolbar")
   if (options.readOnly) disabledPlugins.push("save")
 
+  // toolbar 配置优先级：toolbarItems > disabledToolbarItems > 默认
+  let toolbarConfig: ThirdPartyEditorOptions["toolbar"] | undefined
+  if (options.toolbarItems != null) {
+    toolbarConfig = { agentConfig: { default: { items: options.toolbarItems } } }
+  } else if (options.disabledToolbarItems != null) {
+    toolbarConfig = { agentConfig: { default: { items: options.disabledToolbarItems } } }
+  }
+
   // 创建编辑器 root 容器，隔离编辑器 DOM 与宿主 container
   const editorRoot = document.createElement("div")
   options.container.appendChild(editorRoot)
@@ -384,23 +433,26 @@ export async function createYuqueEditor(
           KaTexURL: assets.katex
         }
       : undefined,
+    toolbar: toolbarConfig,
     image: options.uploadImage
       ? {
           async createUploadPromise(request: ThirdPartyUploadRequest) {
-            if (request.type === "base64") {
-              return options.uploadImage!({ data: request.data })
-            }
-            return options.uploadImage!({ data: request.data as File })
+            const type = request.type as "url" | "file" | "base64"
+            return options.uploadImage!({
+              type: type ?? "file",
+              data: request.data
+            })
           }
         }
       : undefined,
     video: options.uploadVideo
       ? {
           async createUploadPromise(request: ThirdPartyUploadRequest) {
-            if (request.type === "base64") {
-              return options.uploadVideo!({ data: request.data })
-            }
-            return options.uploadVideo!({ data: request.data as File })
+            const type = request.type as "url" | "file" | "base64"
+            return options.uploadVideo!({
+              type: type ?? "file",
+              data: request.data
+            })
           }
         }
       : undefined
@@ -418,7 +470,6 @@ export async function createYuqueEditor(
         () => editor.getDocument(currentScheme, { includeMeta: true }),
         ""
       )
-      // 如果内容和最后一次主动 setDocument 的内容一致，跳过（避免初始化/同步时多余触发）
       if (v === lastSetContent) {
         lastSetContent = "" // 只跳过一次
         return
@@ -426,6 +477,42 @@ export async function createYuqueEditor(
       options.onChange?.(v)
     })
     if (typeof off === "function") disposers.push(off)
+
+    // focus 事件
+    if (options.onFocus) {
+      const offFocus = editor.on("focus", () => {
+        if (disposed) return
+        options.onFocus?.()
+      })
+      if (typeof offFocus === "function") disposers.push(offFocus)
+    }
+
+    // blur 事件
+    if (options.onBlur) {
+      const offBlur = editor.on("blur", () => {
+        if (disposed) return
+        options.onBlur?.()
+      })
+      if (typeof offBlur === "function") disposers.push(offBlur)
+    }
+
+    // selectionchange 事件
+    if (options.onSelectionChange) {
+      const offSel = editor.on("selectionchange", () => {
+        if (disposed) return
+        options.onSelectionChange?.()
+      })
+      if (typeof offSel === "function") disposers.push(offSel)
+    }
+
+    // focusstatuschange 事件
+    if (options.onFocusStatusChange) {
+      const offFs = editor.on("focusstatuschange", (focused: unknown) => {
+        if (disposed) return
+        options.onFocusStatusChange?.(!!focused)
+      })
+      if (typeof offFs === "function") disposers.push(offFs)
+    }
   }
 
   if (options.value != null) {
@@ -442,6 +529,16 @@ export async function createYuqueEditor(
     // onLoad 回调由宿主应用提供，异常不应影响编辑器本身
     // console.warn("[yuque-editor-core] onLoad callback error:", e)
     options.onError?.(normalizeError(e))
+  }
+
+  const exec = (cmd: string, ...args: unknown[]) => {
+    if (disposed) return
+    if (typeof editor.execCommand === "function") {
+      safeCall(() => {
+        editor.execCommand!(cmd, ...args)
+        return undefined
+      }, undefined)
+    }
   }
 
   const api: YuqueEditorRef = {
@@ -496,7 +593,6 @@ export async function createYuqueEditor(
     wordCount() {
       if (disposed) return 0
       const text = api.getSummaryContent()
-      // 中文字符单独计数 + 英文单词计数，更符合用户对"字数"的预期
       const chinese = text.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g)?.length ?? 0
       const english = text.match(/[a-zA-Z]+/g)?.length ?? 0
       return chinese + english
@@ -521,6 +617,7 @@ export async function createYuqueEditor(
     },
     destroy() {
       if (disposed) return
+      options.onBeforeDestroy?.()
       disposed = true
       for (const d of disposers) d()
       if (typeof editor?.destroy === "function") {
@@ -529,9 +626,28 @@ export async function createYuqueEditor(
           return undefined
         }, undefined)
       }
-      // 只移除编辑器自己创建的 root，不侵入宿主 container
       editorRoot.remove()
-    }
+    },
+    // === execCommand 封装 ===
+    undo() { exec("undo") },
+    redo() { exec("redo") },
+    insertText(text: string) { exec("insertText", text) },
+    setBold(value?: boolean) { exec("bold", value) },
+    setItalic(value?: boolean) { exec("italic", value) },
+    setUnderline(value?: boolean) { exec("underline", value) },
+    setStrikethrough(value?: boolean) { exec("strikethrough", value) },
+    setColor(color: string) { exec("color", color) },
+    setBgColor(color: string) { exec("bgColor", color) },
+    clearColor() { exec("clearColor") },
+    clearBgColor() { exec("clearBgColor") },
+    setAlignment(value) { exec("alignment", value) },
+    setParagraphStyle(style) { exec("style", style) },
+    setFontsize(size: number) { exec("fontsize", size) },
+    indent() { exec("indent") },
+    outdent() { exec("outdent") },
+    clearFormat() { exec("clearFormat") },
+    selectAll() { exec("selectAll") },
+    getWordCount() { return api.wordCount() }
   }
 
   return api

@@ -40,22 +40,52 @@ pnpm run dev:vue
 
 ### packages/react
 
-React 18 + TypeScript + Vite 示例，演示：
+React 18 + TypeScript + Vite 示例，功能演示：
 
 - 初始化编辑器并加载内容
-- 获取摘要（JSON）
-- 清空内容
-- 获取字数统计
-- 查看原始 HTML
+- execCommand 全套操作（文字格式、颜色、对齐、字号、段落样式）
+- undo / redo、焦点控制、全选
+- 格式切换（html / markdown / plain / lake / json）
+- 字数统计、摘要获取
+- 实时事件日志
 
 ### packages/vue
 
-Vue 3 + TypeScript + Vite 示例，功能同 React 版本。
+Vue 3 + TypeScript + Vite 示例，功能同 React 版本，另含：
+
+- 划词评论系统（高亮 + 气泡弹窗 + 侧边栏面板）
+- 底部回复编辑器
 
 ## 环境要求
 
 - Node.js >= 18
 - pnpm >= 9
+
+## 发布
+
+发布 `yuque-editor-core` 包前，需要先构建 TypeScript 产物：
+
+```bash
+# 1. 更新版本号（packages/core/package.json 中的 version 字段）
+# 2. 构建
+cd packages/core
+pnpm run build
+
+# 3. 确认 dist 产物
+ls dist/
+
+# 4. 登录 npm（需要先有账号）
+npm login
+
+# 5. 发布
+npm publish --access public
+
+# 6. 打 git tag
+git tag v0.0.7
+git push origin v0.0.7
+```
+
+> **注意**：每次发布前务必先执行 `pnpm run build`，确保 dist 目录包含最新的编译产物。
 
 ## License
 
