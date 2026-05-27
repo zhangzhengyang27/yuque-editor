@@ -35,6 +35,155 @@ function extractConfig(props: YuqueRichTextProps) {
   }
 }
 
+function hasRenderedContent(container: HTMLDivElement | null, value: string) {
+  if (!container) return false
+  if (!value.trim()) return true
+  const engine = container.querySelector(".ne-engine")
+  const text = engine?.textContent?.trim() ?? ""
+  return text.length > 0
+}
+
+function applyEditorLayout(container: HTMLDivElement | null) {
+  if (!container) return
+
+  const setStyle = (element: Element | null, styles: Partial<CSSStyleDeclaration>) => {
+    if (!(element instanceof HTMLElement)) return
+    Object.assign(element.style, styles)
+  }
+
+  setStyle(container, {
+    display: "flex",
+    flex: "1 1 auto",
+    flexDirection: "column",
+    minHeight: "100%",
+    height: "100%"
+  })
+
+  const wrapper = container.firstElementChild
+  setStyle(wrapper, {
+    display: "flex",
+    flex: "1 1 auto",
+    flexDirection: "column",
+    minHeight: "100%",
+    height: "100%"
+  })
+
+  const editor = container.querySelector(".ne-editor")
+  setStyle(editor, {
+    display: "flex",
+    flex: "1 1 auto",
+    flexDirection: "column",
+    minHeight: "100%",
+    height: "100%"
+  })
+
+  const adapt = container.querySelector(".ne-layout-mode-adapt")
+  setStyle(adapt, {
+    display: "flex",
+    flex: "1 1 auto",
+    flexDirection: "column",
+    minHeight: "100%",
+    height: "100%"
+  })
+
+  setStyle(container.querySelector(".ne-ui"), {
+    display: "flex",
+    flex: "0 0 auto",
+    flexDirection: "column"
+  })
+
+  setStyle(container.querySelector(".ne-editor-body"), {
+    display: "flex",
+    flex: "1 1 auto",
+    flexDirection: "column",
+    minHeight: "0",
+    height: "100%"
+  })
+
+  setStyle(container.querySelector(".ne-editor-wrap"), {
+    display: "flex",
+    flex: "1 1 auto",
+    flexDirection: "column",
+    minHeight: "0",
+    height: "100%"
+  })
+
+  setStyle(container.querySelector(".ne-editor-wrap-content"), {
+    display: "flex",
+    flex: "1 1 auto",
+    flexDirection: "column",
+    minHeight: "0",
+    height: "100%"
+  })
+
+  setStyle(container.querySelector(".ne-editor-outer-wrap-box"), {
+    display: "flex",
+    flex: "1 1 auto",
+    flexDirection: "column",
+    minHeight: "0",
+    height: "100%"
+  })
+
+  ;[".ne-editor-wrap-box", ".ne-editor-box", ".ne-engine-box"].forEach((selector) => {
+    setStyle(container.querySelector(selector), {
+      display: "flex",
+      flex: "1 1 auto",
+      flexDirection: "column",
+      minHeight: "0",
+      height: "100%"
+    })
+  })
+
+  ;[".ne-engine", ".ne-view"].forEach((selector) => {
+    setStyle(container.querySelector(selector), {
+      flex: "1 1 auto",
+      minHeight: "100%",
+      height: "100%"
+    })
+  })
+}
+
+function syncEditorValue(
+  api: YuqueEditorRef,
+  container: HTMLDivElement | null,
+  value: string,
+  scheme: YuqueDocScheme | undefined,
+  pendingProgrammaticValueRef: React.MutableRefObject<string>,
+  initSyncPayloadRef: React.MutableRefObject<string>,
+  lastAppliedValueRef: React.MutableRefObject<string>,
+  lastEmittedValueRef: React.MutableRefObject<string>
+) {
+  const target = value ?? ""
+  applyEditorLayout(container)
+  const current = api.getContent(scheme as YuqueDocScheme)
+  if (current === target && hasRenderedContent(container, target)) {
+    if (initSyncPayloadRef.current === target) {
+      initSyncPayloadRef.current = ""
+    }
+    lastAppliedValueRef.current = current
+    lastEmittedValueRef.current = current
+    return true
+  }
+
+  pendingProgrammaticValueRef.current = target
+  if (target) {
+    initSyncPayloadRef.current = target
+  }
+  api.setContent(target, scheme as YuqueDocScheme)
+
+  const next = api.getContent(scheme as YuqueDocScheme)
+  if (next === target && hasRenderedContent(container, target)) {
+    if (initSyncPayloadRef.current === target) {
+      initSyncPayloadRef.current = ""
+    }
+    lastAppliedValueRef.current = next
+    lastEmittedValueRef.current = next
+    return true
+  }
+
+  return false
+}
+
 export const YuqueRichText = forwardRef<YuqueEditorRef, YuqueRichTextProps>(
   function YuqueRichText(
     props: YuqueRichTextProps,
@@ -44,6 +193,10 @@ export const YuqueRichText = forwardRef<YuqueEditorRef, YuqueRichTextProps>(
     const editorRef = useRef<YuqueEditorRef | null>(null)
     const propsRef = useRef(props)
     propsRef.current = props
+    const lastEmittedValueRef = useRef(props.value ?? "")
+    const lastAppliedValueRef = useRef(props.value ?? "")
+    const pendingProgrammaticValueRef = useRef("")
+    const initSyncPayloadRef = useRef("")
 
     // 稳定化配置引用：只在配置语义变化时才触发重建
     const configRef = useRef(extractConfig(props))
@@ -125,6 +278,32 @@ export const YuqueRichText = forwardRef<YuqueEditorRef, YuqueRichTextProps>(
             },
             onChange: (v) => {
               if (!active.current) return
+              const pendingValue = pendingProgrammaticValueRef.current
+              if (pendingValue) {
+                if (v === pendingValue) {
+                  pendingProgrammaticValueRef.current = ""
+                  lastEmittedValueRef.current = v
+                  lastAppliedValueRef.current = v
+                  return
+                }
+
+                const normalized = v.trim()
+                if (
+                  pendingValue.trim() !== "" &&
+                  (normalized === "" || normalized === "<p></p>")
+                ) {
+                  return
+                }
+              }
+              if (initSyncPayloadRef.current) {
+                const normalized = v.trim()
+                if (normalized === "" || normalized === "<p></p>") {
+                  return
+                }
+                initSyncPayloadRef.current = ""
+              }
+              lastEmittedValueRef.current = v
+              lastAppliedValueRef.current = v
               propsRef.current.onChange?.(v)
             },
             onFocus: () => {
@@ -154,6 +333,24 @@ export const YuqueRichText = forwardRef<YuqueEditorRef, YuqueRichTextProps>(
           }
           // 先赋值 ref，再触发 onLoad，确保用户在 onLoad 里可以访问 ref
           editorRef.current = api
+          const initialValue = props.value ?? ""
+          const retryDelays = [0, 32, 120, 360, 1000]
+          retryDelays.forEach((delay) => {
+            window.setTimeout(() => {
+              if (!active.current || editorRef.current !== api) return
+              applyEditorLayout(el)
+              syncEditorValue(
+                api,
+                el,
+                propsRef.current.value ?? initialValue,
+                props.scheme as YuqueDocScheme,
+                pendingProgrammaticValueRef,
+                initSyncPayloadRef,
+                lastAppliedValueRef,
+                lastEmittedValueRef
+              )
+            }, delay)
+          })
           if (pendingOnLoad) {
             propsRef.current.onLoad?.()
           }
@@ -176,13 +373,27 @@ export const YuqueRichText = forwardRef<YuqueEditorRef, YuqueRichTextProps>(
       const api = editorRef.current
       if (!api) return
       const next = props.value ?? ""
-      const current = api.getContent(props.scheme as YuqueDocScheme)
-      if (current !== next) {
-        api.setContent(next, props.scheme as YuqueDocScheme)
-      }
+      if (next === lastAppliedValueRef.current || next === lastEmittedValueRef.current) return
+      const retryDelays = [0, 32, 120, 360]
+      retryDelays.forEach((delay) => {
+        window.setTimeout(() => {
+          if (editorRef.current !== api) return
+          applyEditorLayout(containerRef.current)
+          syncEditorValue(
+            api,
+            containerRef.current,
+            next,
+            props.scheme as YuqueDocScheme,
+            pendingProgrammaticValueRef,
+            initSyncPayloadRef,
+            lastAppliedValueRef,
+            lastEmittedValueRef
+          )
+        }, delay)
+      })
     }, [props.value, props.scheme])
 
-    return <div ref={containerRef} />
+    return <div ref={containerRef} style={{ display: "flex", flex: "1 1 auto", minHeight: "100%", height: "100%" }} />
   }
 )
 
