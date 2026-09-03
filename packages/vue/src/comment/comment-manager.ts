@@ -15,9 +15,9 @@ import type {
   CommentReply,
   CommentSystemOptions,
   CommentUser,
-  HighlightSelection
-} from './types'
-import { HighlightEngine, selectionToHighlight } from './highlight-engine'
+  HighlightSelection,
+} from "./types"
+import { HighlightEngine, selectionToHighlight } from "./highlight-engine"
 
 let _nextId = 1
 function genId(): string {
@@ -51,15 +51,15 @@ export class CommentManager {
     this.currentUser = options.currentUser
     this.onChangeCallback = options.onChange
 
-    // 查找可滚动父容器
+    // 查找可滚动父容器（兜底为视口滚动 window）
     const scrollContainer = this.findScrollContainer(options.container)
 
     this.highlightEngine = new HighlightEngine({
       container: options.container,
-      scrollContainer
+      scrollContainer,
     })
 
-    // 恢复已有评论的高亮
+    // 初始化选区监听（划词后显示浮动按钮）
     this.setupSelectionListener()
   }
 
@@ -72,7 +72,7 @@ export class CommentManager {
 
   /** 获取指定 ID 的评论 */
   getComment(id: string): Comment | undefined {
-    return this.comments.find(c => c.id === id)
+    return this.comments.find((c) => c.id === id)
   }
 
   /** 添加评论 */
@@ -84,7 +84,7 @@ export class CommentManager {
       highlight,
       replies: [],
       resolved: false,
-      createdAt: Date.now()
+      createdAt: Date.now(),
     }
 
     this.comments.push(comment)
@@ -94,59 +94,59 @@ export class CommentManager {
     }
 
     this.emitChange()
-    this.emit({ type: 'comment:add', data: { comment } })
+    this.emit({ type: "comment:add", data: { comment } })
     return comment
   }
 
   /** 添加回复 */
   addReply(commentId: string, content: string): CommentReply | null {
-    const comment = this.comments.find(c => c.id === commentId)
+    const comment = this.comments.find((c) => c.id === commentId)
     if (!comment) return null
 
     const reply: CommentReply = {
       id: genId(),
       content,
       user: this.currentUser,
-      createdAt: Date.now()
+      createdAt: Date.now(),
     }
 
     comment.replies.push(reply)
     this.emitChange()
-    this.emit({ type: 'reply:add', data: { commentId, reply } })
+    this.emit({ type: "reply:add", data: { commentId, reply } })
     return reply
   }
 
   /** 标记为已解决 */
   resolveComment(commentId: string) {
-    const comment = this.comments.find(c => c.id === commentId)
+    const comment = this.comments.find((c) => c.id === commentId)
     if (!comment) return
 
     comment.resolved = true
     this.highlightEngine.updateResolved(commentId, true)
     this.emitChange()
-    this.emit({ type: 'comment:resolve', data: { commentId } })
+    this.emit({ type: "comment:resolve", data: { commentId } })
   }
 
   /** 取消已解决 */
   unresolveComment(commentId: string) {
-    const comment = this.comments.find(c => c.id === commentId)
+    const comment = this.comments.find((c) => c.id === commentId)
     if (!comment) return
 
     comment.resolved = false
     this.highlightEngine.updateResolved(commentId, false)
     this.emitChange()
-    this.emit({ type: 'comment:unresolve', data: { commentId } })
+    this.emit({ type: "comment:unresolve", data: { commentId } })
   }
 
   /** 删除评论 */
   deleteComment(commentId: string) {
-    const index = this.comments.findIndex(c => c.id === commentId)
+    const index = this.comments.findIndex((c) => c.id === commentId)
     if (index === -1) return
 
     this.comments.splice(index, 1)
     this.highlightEngine.removeHighlight(commentId)
     this.emitChange()
-    this.emit({ type: 'comment:delete', data: { commentId } })
+    this.emit({ type: "comment:delete", data: { commentId } })
   }
 
   /** 滚动到指定评论的高亮位置 */
@@ -224,10 +224,14 @@ export class CommentManager {
     this.onChangeCallback?.([...this.comments])
   }
 
-  /** 查找最近的真正可滚动容器 */
-  private findScrollContainer(el: HTMLElement): HTMLElement {
+  /**
+   * 查找最近的真正可滚动容器。
+   * 找不到时兜底返回 window：视口滚动的 scroll 事件以 document 为 target，
+   * 监听 documentElement 收不到，必须交给 window。
+   */
+  private findScrollContainer(el: HTMLElement): HTMLElement | Window {
     const canScroll = (value: string): boolean =>
-      value === 'auto' || value === 'scroll' || value === 'overlay'
+      value === "auto" || value === "scroll" || value === "overlay"
 
     let current = el.parentElement
     while (current) {
@@ -236,15 +240,19 @@ export class CommentManager {
       // 「overflow:hidden + overflowY:auto」这类元素被误判成滚动容器
       const xScrollable = canScroll(style.overflowX) || canScroll(style.overflow)
       const yScrollable = canScroll(style.overflowY) || canScroll(style.overflow)
-      if ((xScrollable || yScrollable) &&
-        (style.overflow === 'scroll' || style.overflowX === 'scroll' || style.overflowY === 'scroll' ||
+      if (
+        (xScrollable || yScrollable) &&
+        (style.overflow === "scroll" ||
+          style.overflowX === "scroll" ||
+          style.overflowY === "scroll" ||
           current.scrollHeight > current.clientHeight ||
-          current.scrollWidth > current.clientWidth)) {
+          current.scrollWidth > current.clientWidth)
+      ) {
         return current
       }
       current = current.parentElement
     }
-    return document.documentElement
+    return window
   }
 
   // ==================== 选区浮动按钮 ====================
@@ -254,9 +262,9 @@ export class CommentManager {
     if (this._selectionListenerActive) return
     this._selectionListenerActive = true
 
-    this.container.addEventListener('mouseup', this.onMouseUp)
-    this.container.addEventListener('keyup', this.onMouseUp)
-    document.addEventListener('click', this.onDocumentClick)
+    this.container.addEventListener("mouseup", this.onMouseUp)
+    this.container.addEventListener("keyup", this.onMouseUp)
+    document.addEventListener("click", this.onDocumentClick)
   }
 
   private onMouseUp = () => {
@@ -292,10 +300,10 @@ export class CommentManager {
     const rect = range.getBoundingClientRect()
 
     if (!this.floatingBtn) {
-      this.floatingBtn = document.createElement('div')
-      this.floatingBtn.className = 'yuque-comment-float-btn'
-      this.floatingBtn.innerHTML = '💬 评论'
-      this.floatingBtn.addEventListener('click', (e) => {
+      this.floatingBtn = document.createElement("div")
+      this.floatingBtn.className = "yuque-comment-float-btn"
+      this.floatingBtn.innerHTML = "💬 评论"
+      this.floatingBtn.addEventListener("click", (e) => {
         e.preventDefault()
         e.stopPropagation()
         this.onFloatingBtnClick()
@@ -309,12 +317,12 @@ export class CommentManager {
 
     this.floatingBtn.style.top = `${top}px`
     this.floatingBtn.style.left = `${left}px`
-    this.floatingBtn.style.display = 'flex'
+    this.floatingBtn.style.display = "flex"
   }
 
   private hideFloatingButton() {
     if (this.floatingBtn) {
-      this.floatingBtn.style.display = 'none'
+      this.floatingBtn.style.display = "none"
     }
   }
 
@@ -333,8 +341,8 @@ export class CommentManager {
 
     // 发出事件，让 UI 层显示评论弹窗
     this.emit({
-      type: 'highlight:add',
-      data: { highlight, rangeRect: range.getBoundingClientRect() }
+      type: "highlight:add",
+      data: { highlight, rangeRect: range.getBoundingClientRect() },
     })
   }
 
@@ -356,9 +364,9 @@ export class CommentManager {
   destroy() {
     if (this._disposed) return
     this._disposed = true
-    this.container.removeEventListener('mouseup', this.onMouseUp)
-    this.container.removeEventListener('keyup', this.onMouseUp)
-    document.removeEventListener('click', this.onDocumentClick)
+    this.container.removeEventListener("mouseup", this.onMouseUp)
+    this.container.removeEventListener("keyup", this.onMouseUp)
+    document.removeEventListener("click", this.onDocumentClick)
 
     this.clearActiveTimer()
 

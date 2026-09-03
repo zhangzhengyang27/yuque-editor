@@ -8,6 +8,12 @@
     "build": "pnpm --filter yuque-editor-core run build",
     "dev:react": "pnpm --filter @yuque-editor/react-example dev",
     "dev:vue": "pnpm --filter @yuque-editor/vue-example dev",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "clean": "pnpm --filter '*' run clean"
+  },
+  "devDependencies": {
+    "happy-dom": "^20.13.2",
+    "vitest": "^5.0.0"
   }
 }

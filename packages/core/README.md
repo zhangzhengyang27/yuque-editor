@@ -36,7 +36,7 @@ import { createYuqueEditor } from "yuque-editor-core/editor"
 
 const ref = await createYuqueEditor({
   container: document.getElementById("app")!,
-  value: "<p>Hello</p>"
+  value: "<p>Hello</p>",
 })
 ```
 
@@ -50,13 +50,7 @@ export default function App() {
   const [value, setValue] = React.useState("<p>Hello</p>")
   const editorRef = React.useRef<YuqueEditorRef>(null)
 
-  return (
-    <YuqueRichText
-      ref={editorRef}
-      value={value}
-      onChange={setValue}
-    />
-  )
+  return <YuqueRichText ref={editorRef} value={value} onChange={setValue} />
 }
 ```
 
@@ -64,11 +58,7 @@ export default function App() {
 
 ```vue
 <template>
-  <YuqueRichText
-    ref="editorRef"
-    :value="value"
-    @change="onChange"
-  />
+  <YuqueRichText ref="editorRef" :value="value" @change="onChange" />
 </template>
 
 <script setup lang="ts">
@@ -84,6 +74,13 @@ function onChange(next: string) {
 }
 </script>
 ```
+
+### 受控用法（重要）
+
+`YuqueRichText` 是受控组件：**必须把 `onChange` 收到的值回写到 `value`**，形成
+`onChange → setState / ref 更新 → value` 的闭环。回声抑制与重试同步（`ValueSyncer`）
+依赖这个闭环来取消未决的写入重试——如果不回写 `value`（非受控用法），重试定时器
+可能用旧值覆盖用户的最新输入。
 
 ### 错误处理
 
@@ -102,11 +99,7 @@ React：通过 `onError` 回调监听初始化失败或内部异常。
 Vue 3：通过 `@error` 事件监听。
 
 ```vue
-<YuqueRichText
-  :value="value"
-  @change="onChange"
-  @error="onError"
-/>
+<YuqueRichText :value="value" @change="onChange" @error="onError" />
 ```
 
 ### 图片 / 视频上传
@@ -149,7 +142,7 @@ YUQUE_EDITOR_DEBUG=1 pnpm dev
 import { yuqueAssets } from "yuque-editor-core/vite-assets"
 
 export default {
-  plugins: [yuqueAssets()]
+  plugins: [yuqueAssets()],
 }
 ```
 
@@ -163,7 +156,7 @@ yuqueAssets({
   // 自定义 URL 前缀与产物子目录，默认 "/yuque-assets"
   baseUrl: "/static/editor-assets",
   // 显式指定本地资源目录，跳过自动搜索（也可用环境变量 YUQUE_ASSETS_DIR）
-  assetsDir: "./local-assets/yuque-assets"
+  assetsDir: "./local-assets/yuque-assets",
 })
 ```
 
@@ -189,51 +182,51 @@ editorRef.current?.destroy()
 
 完整 API 列表：
 
-| 方法 | 说明 |
-|------|------|
-| `appendContent(html, breakLine?)` | 在选区插入内容，`breakLine` 为 `true` 时先插入空行 |
-| `setContent(content, scheme?)` | 写入内容并同步文档格式 |
-| `getContent(scheme?)` | 按指定格式读取当前文档 |
-| `isEmpty()` | 判断文档是否为空 |
-| `getSummaryContent()` | 获取纯文本摘要 |
-| `wordCount()` | 字数统计（中文按字符、英文按单词计数） |
-| `focusToStart(offset?)` | 光标移至文档起始位置 |
-| `insertBreakLine()` | 插入空行 |
-| `destroy()` | 销毁实例、解绑事件并清理 DOM |
-| `undo()` | 撤销上一个命令 |
-| `redo()` | 重做上一个撤销的命令 |
-| `insertText(text)` | 在当前选区插入普通文本 |
-| `setBold(value?)` | 切换选中文本的加粗状态 |
-| `setItalic(value?)` | 切换选中文本的斜体状态 |
-| `setUnderline(value?)` | 切换选中文本的下划线状态 |
-| `setStrikethrough(value?)` | 切换选中文本的中划线状态 |
-| `setColor(color)` | 设置选中文本的颜色（支持渐变色） |
-| `setBgColor(color)` | 设置选中文本的背景颜色 |
-| `clearColor()` | 清除文本前景色 |
-| `clearBgColor()` | 清除文本背景颜色 |
-| `setAlignment(value)` | 设置段落对齐方式，可选值：`left` / `right` / `center` / `justify` / `distributed` |
-| `setParagraphStyle(style)` | 设置段落样式，可选值：`p` / `h1` ~ `h6` |
-| `setFontsize(size)` | 设置字号，可选值：`12, 13, 14, 15, 16, 19, 22, 24, 29, 32, 40` |
-| `indent()` | 增加缩进 |
-| `outdent()` | 减少缩进 |
-| `clearFormat()` | 清除选区的格式 |
-| `selectAll()` | 全选当前文档 |
-| `getWordCount()` | `wordCount()` 的别名 |
+| 方法                              | 说明                                                                              |
+| --------------------------------- | --------------------------------------------------------------------------------- |
+| `appendContent(html, breakLine?)` | 在选区插入内容，`breakLine` 为 `true` 时先插入空行                                |
+| `setContent(content, scheme?)`    | 写入内容并同步文档格式                                                            |
+| `getContent(scheme?)`             | 按指定格式读取当前文档                                                            |
+| `isEmpty()`                       | 判断文档是否为空                                                                  |
+| `getSummaryContent()`             | 获取纯文本摘要                                                                    |
+| `wordCount()`                     | 字数统计（中文按字符、英文按单词计数）                                            |
+| `focusToStart(offset?)`           | 光标移至文档起始位置                                                              |
+| `insertBreakLine()`               | 插入空行                                                                          |
+| `destroy()`                       | 销毁实例、解绑事件并清理 DOM                                                      |
+| `undo()`                          | 撤销上一个命令                                                                    |
+| `redo()`                          | 重做上一个撤销的命令                                                              |
+| `insertText(text)`                | 在当前选区插入普通文本                                                            |
+| `setBold(value?)`                 | 切换选中文本的加粗状态                                                            |
+| `setItalic(value?)`               | 切换选中文本的斜体状态                                                            |
+| `setUnderline(value?)`            | 切换选中文本的下划线状态                                                          |
+| `setStrikethrough(value?)`        | 切换选中文本的中划线状态                                                          |
+| `setColor(color)`                 | 设置选中文本的颜色（支持渐变色）                                                  |
+| `setBgColor(color)`               | 设置选中文本的背景颜色                                                            |
+| `clearColor()`                    | 清除文本前景色                                                                    |
+| `clearBgColor()`                  | 清除文本背景颜色                                                                  |
+| `setAlignment(value)`             | 设置段落对齐方式，可选值：`left` / `right` / `center` / `justify` / `distributed` |
+| `setParagraphStyle(style)`        | 设置段落样式，可选值：`p` / `h1` ~ `h6`                                           |
+| `setFontsize(size)`               | 设置字号，可选值：`12, 13, 14, 15, 16, 19, 22, 24, 29, 32, 40`                    |
+| `indent()`                        | 增加缩进                                                                          |
+| `outdent()`                       | 减少缩进                                                                          |
+| `clearFormat()`                   | 清除选区的格式                                                                    |
+| `selectAll()`                     | 全选当前文档                                                                      |
+| `getWordCount()`                  | `wordCount()` 的别名                                                              |
 
 > `destroy()` 仅移除编辑器自身的 DOM 节点，不会清空宿主容器的其他内容。
 
 ### 事件回调
 
-| 事件 | 触发时机 |
-|------|---------|
-| `onChange` | 文档内容变化（已内置去重，不会因自身 setContent 重复触发） |
-| `onLoad` | 编辑器初始化完成 |
-| `onError` | 初始化失败或内部异常 |
-| `onFocus` | 编辑器获得焦点 |
-| `onBlur` | 编辑器失去焦点 |
-| `onSelectionChange` | 选区发生变化 |
-| `onFocusStatusChange` | 焦点状态变化，`focused` 参数指示是否获得焦点 |
-| `onBeforeDestroy` | 编辑器销毁前触发 |
+| 事件                  | 触发时机                                                   |
+| --------------------- | ---------------------------------------------------------- |
+| `onChange`            | 文档内容变化（已内置去重，不会因自身 setContent 重复触发） |
+| `onLoad`              | 编辑器初始化完成                                           |
+| `onError`             | 初始化失败或内部异常                                       |
+| `onFocus`             | 编辑器获得焦点                                             |
+| `onBlur`              | 编辑器失去焦点                                             |
+| `onSelectionChange`   | 选区发生变化                                               |
+| `onFocusStatusChange` | 焦点状态变化，`focused` 参数指示是否获得焦点               |
+| `onBeforeDestroy`     | 编辑器销毁前触发                                           |
 
 ## 工具函数导出
 
@@ -258,16 +251,17 @@ resetAssetLoaders()
 
 ### 目录与职责
 
-| 文件 | 职责 |
-|------|------|
-| `src/editor.ts` | 核心能力：资源加载、编辑器初始化、实例 API 封装 |
-| `src/react.tsx` | React 18 组件封装（`forwardRef` 暴露底层实例） |
-| `src/vue.ts` | Vue 3 组件封装（`expose` 暴露底层实例） |
-| `src/controlled.ts` | 受控值同步器 `ValueSyncer`（React/Vue 共用，回声过滤 + 重试同步） |
-| `src/assets.ts` | 离线资源文件名定义与 URL 解析工具 |
-| `src/vite-assets.ts` | Vite 插件：dev 静态中间件 + build `emitFile` 按需提供资源 |
-| `assets/yuque-assets/*` | 内置离线资源源文件 |
-| `scripts/postbuild.cjs` | 构建后整理 `dist` 目录结构并复制离线资源 |
+| 文件                    | 职责                                                                            |
+| ----------------------- | ------------------------------------------------------------------------------- |
+| `src/editor.ts`         | 核心能力：资源加载、编辑器初始化、实例 API 封装                                 |
+| `src/react.tsx`         | React 18 组件封装（`forwardRef` 暴露底层实例）                                  |
+| `src/vue.ts`            | Vue 3 组件封装（`expose` 暴露底层实例）                                         |
+| `src/controlled.ts`     | 受控值同步器 `ValueSyncer`（React/Vue 共用，回声过滤 + 重试同步）               |
+| `src/lake-dom.ts`       | Lake DOM 布局修正与渲染检测（React/Vue 共用）                                   |
+| `src/assets.ts`         | 离线资源文件名定义与 URL 解析工具                                               |
+| `src/vite-assets.ts`    | Vite 插件：dev 静态中间件 + build `emitFile` 按需提供资源                       |
+| `assets/yuque-assets/*` | 内置离线资源源文件                                                              |
+| `scripts/postbuild.cjs` | 构建后整理 `dist`：从入口自动扫描相对导入、复制模块并重写扩展名，再复制离线资源 |
 
 ### 调用时序图（初始化）
 
@@ -295,30 +289,30 @@ sequenceDiagram
 
 ### 关键配置说明
 
-| 配置项 | 类型 | 说明 |
-|--------|------|------|
-| `value` | `string` | 编辑器内容初始值和受控值 |
-| `scheme` | `YuqueDocScheme` | 文档格式，可选：`text/html` / `text/markdown` / `text/plain` / `text/lake` / `json` |
-| `readOnly` | `boolean` | 只读模式，底层走 `createOpenViewer` |
-| `assets` | `Partial<YuqueEditorAssets>` | 覆盖默认离线资源地址 |
-| `onChange` | `(value: string) => void` | 内容变更回调 |
-| `onLoad` | `() => void` | 编辑器初始化完成回调 |
-| `onError` | `(error: Error) => void` | 错误回调 |
-| `onFocus` | `() => void` | 编辑器获得焦点时触发 |
-| `onBlur` | `() => void` | 编辑器失去焦点时触发 |
-| `onSelectionChange` | `() => void` | 选区变化时触发 |
-| `onFocusStatusChange` | `(focused: boolean) => void` | 焦点状态变化时触发 |
-| `onBeforeDestroy` | `() => void` | 编辑器销毁前触发 |
-| `uploadImage` | `EditorUploadHandler` | 图片上传钩子，入参 `{ type, data }` |
-| `uploadVideo` | `EditorUploadHandler` | 视频上传钩子，入参 `{ type, data }` |
-| `showToolbar` | `boolean` | 控制工具栏显示，默认 `true` |
-| `showToc` | `boolean` | 控制目录显示 |
-| `paragraphSpacing` | `boolean` | 段落间距（经典排版） |
-| `defaultFontSize` | `number` | 默认字号，默认 `15` |
-| `darkMode` | `boolean` | 暗黑模式 |
-| `disabledToolbarItems` | `string[]` | 从默认工具栏列表剔除指定的按钮（与 `toolbarItems` 互斥） |
-| `toolbarItems` | `string[]` | 完全自定义工具栏按钮列表（白名单，优先级高于 `disabledToolbarItems`） |
-| `instanceKey` | `string \| number` | 强制重建编辑器的逃生舱：函数型配置变化不会触发重建，改变此值即可 |
+| 配置项                 | 类型                         | 说明                                                                                |
+| ---------------------- | ---------------------------- | ----------------------------------------------------------------------------------- |
+| `value`                | `string`                     | 编辑器内容初始值和受控值                                                            |
+| `scheme`               | `YuqueDocScheme`             | 文档格式，可选：`text/html` / `text/markdown` / `text/plain` / `text/lake` / `json` |
+| `readOnly`             | `boolean`                    | 只读模式，底层走 `createOpenViewer`                                                 |
+| `assets`               | `Partial<YuqueEditorAssets>` | 覆盖默认离线资源地址                                                                |
+| `onChange`             | `(value: string) => void`    | 内容变更回调                                                                        |
+| `onLoad`               | `() => void`                 | 编辑器初始化完成回调                                                                |
+| `onError`              | `(error: Error) => void`     | 错误回调                                                                            |
+| `onFocus`              | `() => void`                 | 编辑器获得焦点时触发                                                                |
+| `onBlur`               | `() => void`                 | 编辑器失去焦点时触发                                                                |
+| `onSelectionChange`    | `() => void`                 | 选区变化时触发                                                                      |
+| `onFocusStatusChange`  | `(focused: boolean) => void` | 焦点状态变化时触发                                                                  |
+| `onBeforeDestroy`      | `() => void`                 | 编辑器销毁前触发                                                                    |
+| `uploadImage`          | `EditorUploadHandler`        | 图片上传钩子，入参 `{ type, data }`                                                 |
+| `uploadVideo`          | `EditorUploadHandler`        | 视频上传钩子，入参 `{ type, data }`                                                 |
+| `showToolbar`          | `boolean`                    | 控制工具栏显示，默认 `true`                                                         |
+| `showToc`              | `boolean`                    | 控制目录显示                                                                        |
+| `paragraphSpacing`     | `boolean`                    | 段落间距（经典排版）                                                                |
+| `defaultFontSize`      | `number`                     | 默认字号，默认 `15`                                                                 |
+| `darkMode`             | `boolean`                    | 暗黑模式                                                                            |
+| `disabledToolbarItems` | `string[]`                   | 从默认工具栏列表剔除指定的按钮（与 `toolbarItems` 互斥）                            |
+| `toolbarItems`         | `string[]`                   | 完全自定义工具栏按钮列表（白名单，优先级高于 `disabledToolbarItems`）               |
+| `instanceKey`          | `string \| number`           | 强制重建编辑器的逃生舱：函数型配置变化不会触发重建，改变此值即可                    |
 
 ### 常见坑位与排查
 
@@ -350,6 +344,7 @@ npm pack --dry-run
 ### 技术实现要点
 
 **资源加载策略** — `ensureAssets` 采用分层并行加载，减少 RTT 等待：
+
 1. 第一层：CSS 全部并行
 2. 第二层：React 依赖链 + 无依赖脚本并行
 3. 第三层：有严格顺序依赖的脚本串行（kitchen → docUmd）

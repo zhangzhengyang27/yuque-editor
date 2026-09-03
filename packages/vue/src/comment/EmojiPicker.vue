@@ -1,14 +1,20 @@
 <template>
-  <div class="emoji-picker" v-click-outside="close">
-    <div class="emoji-picker-trigger" @click="toggle">
+  <div v-click-outside="close" class="emoji-picker">
+    <div class="emoji-picker-trigger" @mousedown.prevent @click="toggle">
       <svg viewBox="0 0 24 24" width="18" height="18">
-        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
-        <circle cx="9" cy="10" r="1.5" fill="currentColor"/>
-        <circle cx="15" cy="10" r="1.5" fill="currentColor"/>
-        <path d="M8 14c.5 2 2 3 4 3s3.5-1 4-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2" />
+        <circle cx="9" cy="10" r="1.5" fill="currentColor" />
+        <circle cx="15" cy="10" r="1.5" fill="currentColor" />
+        <path
+          d="M8 14c.5 2 2 3 4 3s3.5-1 4-3"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+        />
       </svg>
     </div>
-    
+
     <div v-show="visible" class="emoji-picker-dropdown">
       <div class="emoji-picker-header">
         <span class="emoji-picker-title">表情</span>
@@ -21,30 +27,33 @@
             v-for="emoji in commonEmojis"
             :key="emoji"
             class="emoji-item"
+            @mousedown.prevent
             @click="select(emoji)"
           >
             {{ emoji }}
           </button>
         </div>
-        
+
         <div class="emoji-category">表情</div>
         <div class="emoji-list">
           <button
             v-for="emoji in faceEmojis"
             :key="emoji"
             class="emoji-item"
+            @mousedown.prevent
             @click="select(emoji)"
           >
             {{ emoji }}
           </button>
         </div>
-        
+
         <div class="emoji-category">手势</div>
         <div class="emoji-list">
           <button
             v-for="emoji in gestureEmojis"
             :key="emoji"
             class="emoji-item"
+            @mousedown.prevent
             @click="select(emoji)"
           >
             {{ emoji }}
@@ -56,31 +65,104 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref } from "vue"
+import type { Directive } from "vue"
 
 const emit = defineEmits<{
-  (e: 'select', emoji: string): void
+  (e: "select", emoji: string): void
 }>()
 
 const visible = ref(false)
 
 // 常用表情
-const commonEmojis = ['👍', '👎', '❤️', '🎉', '😄', '😂', '😊', '😍', '🤔', '👀']
+const commonEmojis = ["👍", "👎", "❤️", "🎉", "😄", "😂", "😊", "😍", "🤔", "👀"]
 
 // 表情
 const faceEmojis = [
-  '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇',
-  '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚',
-  '😋', '😛', '😝', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🥸',
-  '🤩', '🥳', '😏', '😒', '😞', '😔', '😟', '😕', '🙁', '☹️',
-  '😣', '😖', '😫', '😩', '🥺', '😢', '😭', '😤', '😠', '😡'
+  "😀",
+  "😃",
+  "😄",
+  "😁",
+  "😆",
+  "😅",
+  "😂",
+  "🤣",
+  "😊",
+  "😇",
+  "🙂",
+  "🙃",
+  "😉",
+  "😌",
+  "😍",
+  "🥰",
+  "😘",
+  "😗",
+  "😙",
+  "😚",
+  "😋",
+  "😛",
+  "😝",
+  "😜",
+  "🤪",
+  "🤨",
+  "🧐",
+  "🤓",
+  "😎",
+  "🥸",
+  "🤩",
+  "🥳",
+  "😏",
+  "😒",
+  "😞",
+  "😔",
+  "😟",
+  "😕",
+  "🙁",
+  "☹️",
+  "😣",
+  "😖",
+  "😫",
+  "😩",
+  "🥺",
+  "😢",
+  "😭",
+  "😤",
+  "😠",
+  "😡",
 ]
 
 // 手势
 const gestureEmojis = [
-  '👍', '👎', '👌', '🤌', '🤏', '✌️', '🤞', '🤟', '🤘', '🤙',
-  '👈', '👉', '👆', '🖕', '👇', '☝️', '👍', '👎', '✊', '👊',
-  '🤛', '🤜', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️', '💪'
+  "👍",
+  "👎",
+  "👌",
+  "🤌",
+  "🤏",
+  "✌️",
+  "🤞",
+  "🤟",
+  "🤘",
+  "🤙",
+  "👈",
+  "👉",
+  "👆",
+  "🖕",
+  "👇",
+  "☝️",
+  "👍",
+  "👎",
+  "✊",
+  "👊",
+  "🤛",
+  "🤜",
+  "👏",
+  "🙌",
+  "👐",
+  "🤲",
+  "🤝",
+  "🙏",
+  "✍️",
+  "💪",
 ]
 
 function toggle() {
@@ -92,27 +174,30 @@ function close() {
 }
 
 function select(emoji: string) {
-  emit('select', emoji)
+  emit("select", emoji)
   close()
 }
 
-// 点击外部关闭指令
-const vClickOutside = {
-  mounted(el: HTMLElement, binding: any) {
+// 点击外部关闭指令（handler 存 WeakMap，避免在元素上挂自定义属性）
+const clickOutsideHandlers = new WeakMap<HTMLElement, (e: MouseEvent) => void>()
+
+const vClickOutside: Directive<HTMLElement, () => void> = {
+  mounted(el, binding) {
     const handler = (e: MouseEvent) => {
       if (!el.contains(e.target as Node)) {
         binding.value()
       }
     }
-    document.addEventListener('click', handler)
-    ;(el as any)._clickOutside = handler
+    document.addEventListener("click", handler)
+    clickOutsideHandlers.set(el, handler)
   },
-  unmounted(el: HTMLElement) {
-    const handler = (el as any)._clickOutside
+  unmounted(el) {
+    const handler = clickOutsideHandlers.get(el)
     if (handler) {
-      document.removeEventListener('click', handler)
+      document.removeEventListener("click", handler)
     }
-  }
+    clickOutsideHandlers.delete(el)
+  },
 }
 </script>
 

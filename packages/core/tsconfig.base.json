@@ -16,6 +16,7 @@
     "src/vite-assets.ts",
     "src/editor.ts",
     "src/controlled.ts",
+    "src/lake-dom.ts",
     "src/react.tsx",
     "src/vue.ts"
   ]

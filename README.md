@@ -23,12 +23,17 @@ pnpm install
 # 构建 core 包
 pnpm run build
 
+# 运行单元测试
+pnpm test
+
 # 启动 React 示例
 pnpm run dev:react
 
 # 启动 Vue 示例
 pnpm run dev:vue
 ```
+
+推送 / PR 时 GitHub Actions 会自动执行：单测 → 构建 core → 双示例类型检查 → 产物子路径 Node 解析校验（`scripts/verify-dist.mjs`）。
 
 ## 包说明
 

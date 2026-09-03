@@ -2,7 +2,7 @@
 
 > **导语**：这篇文档是 yuque-editor 项目的开篇。我们不急着写代码，先花点时间搞清楚"项目为什么要这样组织"。好的架构不是一开始就完美的，而是在一次次的取舍中演化出来的。本篇将带你从 30,000 英尺的高空俯瞰整个项目，再逐步降落，深入到每一个配置文件和构建脚本。
 
-> 📌 **文档状态（2026-09）**：第 5 章「Vite 插件」已按重构后的实现（dev 中间件 + build `emitFile`，不再写 `public/`）重写；其余章节的行号/行数为编写时快照，请以仓库源码为准。核心包还新增了 `src/controlled.ts`（受控值同步器），并已在 `package.json` 的 `exports` 中暴露 `./controlled` 子路径。
+> 📌 **文档状态（2026-09）**：第 5 章「Vite 插件」已按重构后的实现（dev 中间件 + build `emitFile`，不再写 `public/`）重写；第 4 章「postbuild」已按自动扫描依赖的实现重写；其余章节的行号/行数为编写时快照，请以仓库源码为准。核心包还新增了 `src/controlled.ts`（受控值同步器）、`src/lake-dom.ts`（Lake DOM 布局修正，React/Vue 共用），并已在 `package.json` 的 `exports` 中暴露 `./controlled` 子路径。
 
 ---
 
@@ -739,107 +739,67 @@ for (const name of entries) {
 
 `mustExist(from)` 是一个防御性检查——如果某个中间文件不存在，说明 TypeScript 编译失败了。比起默默跳过，直接报错更能帮你快速定位问题。
 
-#### 第二步：模块路径重写
+#### 第二步：模块路径重写（自动扫描依赖）
 
 这是 postbuild.cjs 最核心的部分。我们需要把所有 `require("./editor")` 改成 `require('./editor.cjs')`，把所有 `from "./editor"` 改成 `from './editor.mjs'`。
 
-**依赖关系映射**：
+> 📌 **实现已重构（2026-09）**：旧版维护一张手工编写的依赖表（`createRewriteTasks({ react: ["editor"], … })`），新增内部模块时忘记同步就会漏改——实际发生过一次：`controlled.ts` 加入后 react/vue 的重写表没有更新，发布产物的 `./controlled` 没带扩展名，Node 下直接 `MODULE_NOT_FOUND`。新版改为**从入口出发自动扫描产物中的相对导入**，依赖模块被递归发现、复制、重写，新增内部模块（如 `lake-dom.ts`）不再需要改这个脚本。
+
+**入口与扫描**：
 
 ```javascript
-const rewriteTasks = createRewriteTasks({
-  index: ["assets", "editor"],       // index 依赖 assets 和 editor
-  "vite-assets": ["assets"],         // vite-assets 依赖 assets
-  editor: ["assets"],                // editor 依赖 assets
-  react: ["editor"],                 // react 依赖 editor
-  vue: ["editor"]                    // vue 依赖 editor
-})
+// 与 package.json exports 对应的入口模块；其依赖由扫描自动带出
+const ENTRIES = ["index", "assets", "vite-assets", "editor", "controlled", "react", "vue"]
+
+// tsc 产物的相对导入形态：CJS 的 require("./x")、ESM 的 from/import "./x"
+// （同时兼容单双引号；\w.- 覆盖 vite-assets 这类连字符命名）
+const CJS_IMPORT = /require\((["'])\.\/([\w.-]+)\1\)/g
+const ESM_IMPORT = /(from|import)\s*(["'])\.\/([\w.-]+)\2/g
 ```
 
-这个映射表精确描述了模块间的依赖关系。`createRewriteTasks` 会为每个依赖项生成 CJS 和 ESM 两种重写任务：
+`processModule(name)` 对每个模块做三件事，并递归处理新发现的依赖：
 
 ```javascript
-function createRewriteTasks(entryDeps) {
-  const tasks = []
-  for (const [entry, deps] of Object.entries(entryDeps)) {
-    if (!deps.length) continue      // 没有依赖的模块（如 assets）跳过
-    tasks.push(
-      // CJS 版本：重写 require("./dep") → require('./dep.cjs')
-      { file: `${entry}.cjs`, replacers: createCjsReplacers(deps) },
-      // ESM 版本：重写 from "./dep" → from './dep.mjs'
-      { file: `${entry}.mjs`, replacers: createEsmReplacers(deps) }
-    )
-  }
-  return tasks
-}
-```
+function processModule(name, processed) {
+  if (processed.has(name)) return
+  processed.add(name)
 
-**正则替换函数**：
+  // 1. 从三个中间目录复制到 dist/ 根目录并重命名（.d.ts 不变，.js → .cjs / .mjs）
+  mustExist(path.resolve(dist, "cjs", `${name}.js`))
+  // ...（mustExist + copyFile，含可选的 ESM source map）
 
-```javascript
-// CJS 版本：require("./editor") → require('./editor.cjs')
-function createCjsReplacers(deps) {
-  const replacers = []
-  for (const dep of deps) {
-    replacers.push(
-      // 匹配双引号版本：require("./editor")
-      [
-        new RegExp(`require\\("\\./${dep}"\\)`, "g"),  // 正则：require("./dep")
-        `require('./${dep}.cjs')`                       // 替换为：require('./dep.cjs')
-      ],
-      // 匹配单引号版本：require('./editor')
-      [
-        new RegExp(`require\\('\\./${dep}'\\)`, "g"),  // 正则：require('./dep')
-        `require('./${dep}.cjs')`                       // 替换为：require('./dep.cjs')
-      ]
-    )
-  }
-  return replacers
-}
+  // 2. 先扫描（匹配的是无扩展名路径），收集依赖模块名
+  const deps = new Set([
+    ...scanRelativeImports(cjsFile, CJS_IMPORT, 2),
+    ...scanRelativeImports(esmFile, ESM_IMPORT, 3)
+  ])
 
-// ESM 版本：from "./editor" → from './editor.mjs'
-function createEsmReplacers(deps) {
-  const replacers = []
-  for (const dep of deps) {
-    replacers.push(
-      // 匹配双引号版本：from "./editor"
-      [
-        new RegExp(`from\\s+"\\.\/${dep}"`, "g"),  // 正则：from "./dep"（\s+ 匹配可能的空格）
-        `from './${dep}.mjs'`                       // 替换为：from './dep.mjs'
-      ],
-      // 匹配单引号版本：from './editor'
-      [
-        new RegExp(`from\\s+'\\.\/${dep}'`, "g"),  // 正则：from './dep'
-        `from './${dep}.mjs'`                       // 替换为：from './dep.mjs'
-      ]
-    )
-  }
-  return replacers
+  // 3. 再统一重写为带扩展名的路径
+  rewriteFile(cjsFile, [[CJS_IMPORT, (_m, _q, dep) => `require('./${dep}.cjs')`]])
+  rewriteFile(esmFile, [[ESM_IMPORT, (_m, kw, _q, dep) => `${kw} './${dep}.mjs'`]])
+
+  // 4. 递归处理依赖（已处理的模块通过 processed 跳过）
+  for (const dep of deps) processModule(dep, processed)
 }
 ```
 
 注意几个细节：
 
-1. **双引号和单引号都要处理**：TypeScript 编译 CJS 时默认用双引号，但某些情况下可能用单引号。两种都覆盖，确保不遗漏。
+1. **双引号和单引号都要处理**：用 `(["'])...\1` 反向引用配对，两种引号都覆盖。
 2. **`/g` 全局匹配**：一个文件可能多次 `require` 同一个依赖，需要全部替换。
 3. **CJS 统一替换成单引号**：`require('./editor.cjs')`。这不影响功能，只是风格统一。
-4. **ESM 的 `\s+`**：`from` 和路径之间可能有空格（TypeScript 格式化时会加空格），用 `\s+` 更鲁棒。
-
-**执行重写**：
-
-```javascript
-for (const t of rewriteTasks) {
-  rewriteFile(path.resolve(dist, t.file), t.replacers)
-}
-```
+4. **ESM 还匹配 `import "./x"`**：副作用导入（无 `from`）同样要补扩展名。
+5. **`.d.ts` 不重写**：TypeScript 对无扩展名的声明导入按模块名解析（找 `x.d.ts`），保持原样即可。
+6. **只有新增 npm 导出子路径时才改 `ENTRIES`**：内部模块靠扫描自动带出。
 
 `rewriteFile` 是一个幂等操作：
 
 ```javascript
-function rewriteFile(filePath, replacers) {
+function rewriteFile(filePath, rules) {
   const content = fs.readFileSync(filePath, "utf8") // 读取文件
   let next = content
-  for (const [from, to] of replacers) {
-    next = next.replace(from, to)  // 逐个正则替换
+  for (const [regexp, to] of rules) {
+    next = next.replace(regexp, to)  // 逐条规则替换
   }
   // 只有内容真正变化了才写入，避免不必要的磁盘 IO
   if (next !== content) {
@@ -849,6 +809,8 @@ function rewriteFile(filePath, replacers) {
 ```
 
 > 💡 **什么是"幂等"？** 意思是执行多次和执行一次的效果相同。如果路径已经是 `.cjs`/`.mjs`，正则匹配不上，就不会修改文件。
+
+> 💡 配套的 `scripts/verify-dist.mjs`（CI 中运行）会在 Node 原生 ESM/CJS 环境下逐个加载所有导出子路径，任何漏改的扩展名都会在这里直接报错，双保险。
 
 #### 第三步：静态资源复制
 

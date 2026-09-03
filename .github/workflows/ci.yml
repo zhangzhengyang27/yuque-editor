@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 读取 packageManager 字段，使用与仓库锁定的 pnpm 版本
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Unit tests
+        run: pnpm test
+
+      # 先构建 core：示例项目的类型检查依赖 dist 产物
+      - name: Build core
+        run: pnpm build
+
+      - name: Typecheck examples
+        run: |
+          pnpm --filter @yuque-editor/react-example exec tsc -b
+          pnpm --filter @yuque-editor/vue-example exec vue-tsc -b
+
+      # 产物导入健全性：Node 下 require/import 所有子路径必须可解析
+      - name: Verify dist subpath resolution
+        run: node scripts/verify-dist.mjs

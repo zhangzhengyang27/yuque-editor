@@ -3,9 +3,10 @@
 > 将一个异步的、有状态的第三方编辑器，安全地"装进"React 和 Vue 的组件模型里——这就是本章要解决的问题。
 
 > 📌 **文档状态（2026-09 代码已重构，本文行号均为旧快照）**：
-> - 现规模：`react.tsx`（337 行）+ `vue.ts`（298 行）+ **新增 `controlled.ts`（177 行）**。受控值去重逻辑（原四处散落的 ref / `lastApplied`）已收敛为框架无关的 `ValueSyncer`，本文 2.6 / 3.7 / 5.2 的描述以 `ValueSyncer` 为准
+> - 现规模：`react.tsx` + `vue.ts` + **`controlled.ts`（受控值同步器）** + **`lake-dom.ts`（Lake DOM 布局修正与渲染检测，React/Vue 共用）**。受控值去重逻辑（原四处散落的 ref / `lastApplied`）已收敛为框架无关的 `ValueSyncer`，本文 2.6 / 3.7 / 5.2 的描述以 `ValueSyncer` 为准
 > - Vue 组件的 `emits` 已从 3 个扩展为 8 个（change/load/error/focus/blur/selectionchange/focusstatuschange/beforedestroy）
-> - React 组件新增 `applyEditorLayout`（修正 Lake 在 flex 容器里的高度塌陷）与 `hasRenderedContent`；Vue 经实测无此问题
+> - `applyEditorLayout` 与 `hasRenderedContent` 已提取到 `src/lake-dom.ts`，React/Vue 封装共用（Vue 的 `ValueSyncer` 同样挂了 `isRendered` / `beforeSync` 钩子）
+> - Vue 封装同样采用了 `pendingOnLoad` 拦截机制（见 3.4 节的旧描述已过时）
 > - 两个组件新增 `instanceKey` prop（函数型配置无法触发重建时的逃生舱）
 > - props 新增 `toolbarItems`（白名单）与 `disabledToolbarItems`（从默认列表剔除，见 `editor.ts` 的 `DEFAULT_TOOLBAR_ITEMS`）
 
@@ -769,11 +770,11 @@ const init = async () => {
 }
 ```
 
-**与 React 的关键区别——onLoad 处理**：
+**与 React 的关键区别——onLoad 处理（历史版本，现已对齐）**：
 
-注意 Vue 版本中 `onLoad: () => emit("load")` 是**直接传递**的，没有 React 版本的 `pendingOnLoad` 拦截机制。
+> 📌 2026-09 更新：Vue 封装已改为与 React 一致的 `pendingOnLoad` 拦截机制——`onLoad` 只设置标志，等 `api` 赋值、同步器就绪、强制校验完成后再 `emit("load")`。旧版直接 `emit("load")` 的做法有一个实际缺陷：`createYuqueEditor` 在 return 前同步调用 `onLoad`，此时 `api` 还是 null，宿主在 `@load` 里调用 `ref.value.wordCount()` 之类的 expose 方法会静默拿到默认值（`App.vue` 的初始字数统计一直是 0）。下面保留旧版分析作为设计背景。
 
-为什么 Vue 不需要拦截？
+旧版 Vue 直接传递的原因（当时的设计权衡）：
 
 **React 需要拦截的原因**：
 - `useImperativeHandle` 在编辑器创建前就已返回代理对象
@@ -1003,7 +1004,7 @@ return () => h("div", { ref: container })
 | **组件定义** | `forwardRef` + 函数组件 | `defineComponent` + `setup` | 框架 API 设计差异。React 用 HOC（forwardRef）转发 ref；Vue 的 setup 第二个参数直接提供 expose |
 | **Ref 暴露** | `useImperativeHandle(ref, ...)` | `expose({ ... })` | React 的 ref 转发需要显式的 forwardRef 包装；Vue 的 expose 是 setup 的内置能力 |
 | **竞态检测** | 标记对象 `{ current: true }` | 版本号 `initSeq` + `destroyed` 布尔 | React Effect cleanup 通过闭包引用标记对象；Vue 用递增版本号更直观。本质相同：都是"让过时的异步操作自行失效" |
-| **onLoad 拦截** | `pendingOnLoad` 标志 + 延迟调用 | 直接传递 `emit("load")` | React 的代理模式需要精确时序控制（先赋值 ref，再触发 onLoad）；Vue 的可选链天然容忍时序差异 |
+| **onLoad 拦截** | `pendingOnLoad` 标志 + 延迟调用 | 同左（已对齐） | 两侧都需要精确时序控制（先赋值 ref，再触发 onLoad）；旧版 Vue 直接传递会导致 `@load` 时 expose 方法尚不可用 |
 | **错误处理** | 未初始化时抛 `Error` | 可选链 `api?.` + 安全默认值 | React 社区偏好 Fail Fast；Vue 社区偏好 Graceful Degradation |
 | **配置变化响应** | `useEffect` + 依赖数组 | `watch` + `flush: "post"` | React 的 Effect 模型在依赖变化时执行 cleanup + re-run；Vue 的 watch 更精确地只关注特定数据 |
 | **Props 引用稳定性** | `propsRef` 持有最新值 | Vue 响应式自动追踪 | React 函数组件每次渲染创建新闭包，闭包中的 props 可能过期；Vue 的 props 是 Proxy 对象，始终反映最新值 |

@@ -11,17 +11,17 @@
  * 宿主应在内容变更时主动调用 `redraw()`（见 CommentManager.redraw / App 的 @change）。
  */
 
-import type { HighlightSelection } from './types'
+import type { HighlightSelection } from "./types"
 
-const HIGHLIGHT_COLOR = 'rgba(255, 224, 60, 0.4)'      // 正常高亮
-const HIGHLIGHT_ACTIVE_COLOR = 'rgba(255, 180, 0, 0.6)'  // 激活/悬浮
-const HIGHLIGHT_RESOLVED_COLOR = 'rgba(160, 220, 160, 0.35)' // 已解决
+const HIGHLIGHT_COLOR = "rgba(255, 224, 60, 0.4)" // 正常高亮
+const HIGHLIGHT_ACTIVE_COLOR = "rgba(255, 180, 0, 0.6)" // 激活/悬浮
+const HIGHLIGHT_RESOLVED_COLOR = "rgba(160, 220, 160, 0.35)" // 已解决
 
 export interface HighlightEngineOptions {
   /** 需要叠加 Canvas 的容器 */
   container: HTMLElement
-  /** 父级可滚动元素（用于 scroll 事件更新） */
-  scrollContainer?: HTMLElement
+  /** 父级可滚动元素（用于 scroll 事件更新）；视口滚动时可传 window */
+  scrollContainer?: HTMLElement | Window
 }
 
 export interface HighlightEntry {
@@ -29,8 +29,6 @@ export interface HighlightEntry {
   selection: HighlightSelection
   resolved: boolean
 }
-
-
 
 /**
  * 从根容器到目标节点的 childIndices 路径
@@ -67,7 +65,7 @@ export function getNodeByPath(root: Node, path: number[]): Node | null {
  */
 export function selectionToHighlight(
   root: HTMLElement,
-  selection: Selection
+  selection: Selection,
 ): HighlightSelection | null {
   if (selection.rangeCount === 0 || selection.isCollapsed) return null
 
@@ -83,7 +81,7 @@ export function selectionToHighlight(
     startOffset: range.startOffset,
     endPath,
     endOffset: range.endOffset,
-    text: selection.toString().trim()
+    text: selection.toString().trim(),
   }
 }
 
@@ -93,7 +91,7 @@ export function selectionToHighlight(
 export class HighlightEngine {
   private canvas: HTMLCanvasElement
   private container: HTMLElement
-  private scrollContainer: HTMLElement
+  private scrollContainer: HTMLElement | Window
   private entries = new Map<string, HighlightEntry>()
   private activeId: string | null = null
   private hoveredId: string | null = null
@@ -110,7 +108,7 @@ export class HighlightEngine {
     this.scrollContainer = options.scrollContainer ?? options.container
 
     // 创建 Canvas 覆盖层
-    this.canvas = document.createElement('canvas')
+    this.canvas = document.createElement("canvas")
     this.canvas.style.cssText = `
       position: absolute;
       top: 0;
@@ -121,8 +119,8 @@ export class HighlightEngine {
 
     // 确保容器是定位上下文
     const containerStyle = getComputedStyle(this.container)
-    if (containerStyle.position === 'static') {
-      this.container.style.position = 'relative'
+    if (containerStyle.position === "static") {
+      this.container.style.position = "relative"
     }
     this.container.appendChild(this.canvas)
 
@@ -148,14 +146,16 @@ export class HighlightEngine {
     // scroll 事件高频触发：先同步重绘，再安排一次 rAF 兜底
     // （某些浏览器滚动期间 scroll 事件可能不是每帧都触发）
     const { signal } = this._abort
-    this.scrollContainer.addEventListener(
-      'scroll',
+    // 视口滚动时 scroll 事件以 document 为 target，不会经过 documentElement，
+    // 因此滚动兜底必须支持 window（scroll 事件不冒泡，元素滚动仍需监听元素本身）
+    ;(this.scrollContainer as EventTarget).addEventListener(
+      "scroll",
       () => {
         if (this._disposed) return
         this.redraw()
         this.scheduleRedraw()
       },
-      { passive: true, signal }
+      { passive: true, signal },
     )
   }
 
@@ -188,7 +188,7 @@ export class HighlightEngine {
       this.canvas.height = height
       this.canvas.style.width = `${rect.width}px`
       this.canvas.style.height = `${rect.height}px`
-      const ctx = this.canvas.getContext('2d')
+      const ctx = this.canvas.getContext("2d")
       if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
   }
@@ -243,12 +243,14 @@ export class HighlightEngine {
       for (const rect of range.getClientRects()) {
         if (rect.width === 0 && rect.height === 0) continue
         // 转换为相对于容器的坐标
-        rects.push(new DOMRect(
-          rect.left - containerRect.left,
-          rect.top - containerRect.top,
-          rect.width,
-          rect.height
-        ))
+        rects.push(
+          new DOMRect(
+            rect.left - containerRect.left,
+            rect.top - containerRect.top,
+            rect.width,
+            rect.height,
+          ),
+        )
       }
 
       // 合并同一行的矩形
@@ -261,7 +263,7 @@ export class HighlightEngine {
   /** 重绘所有高亮 */
   redraw() {
     if (this._disposed) return
-    const ctx = this.canvas.getContext('2d')
+    const ctx = this.canvas.getContext("2d")
     if (!ctx) return
 
     const containerRect = this.container.getBoundingClientRect()
@@ -287,12 +289,12 @@ export class HighlightEngine {
           rect.left + padding,
           rect.top + padding,
           rect.width - padding * 2,
-          rect.height - padding * 2
+          rect.height - padding * 2,
         )
 
         // 已解决：添加删除线效果
         if (entry.resolved && !isActive && !isHovered) {
-          ctx.strokeStyle = 'rgba(120, 180, 120, 0.6)'
+          ctx.strokeStyle = "rgba(120, 180, 120, 0.6)"
           ctx.lineWidth = 1
           ctx.beginPath()
           const midY = rect.top + rect.height / 2
@@ -314,15 +316,23 @@ export class HighlightEngine {
 
     const firstRect = rects[0]
     const containerRect = this.container.getBoundingClientRect()
-    const scrollContainerRect = this.scrollContainer.getBoundingClientRect()
+
+    // 视口滚动：以视口顶边为滚动容器可见顶边（rect.top 已是视口坐标）
+    if (this.scrollContainer instanceof Window) {
+      const targetScroll =
+        window.scrollY + containerRect.top + firstRect.top - window.innerHeight / 3
+      window.scrollTo({ top: Math.max(0, targetScroll), behavior: "smooth" })
+      return
+    }
 
     // 计算高亮在 scrollContainer 中的绝对位置
+    const scrollContainerRect = this.scrollContainer.getBoundingClientRect()
     const absTop = containerRect.top - scrollContainerRect.top + firstRect.top
     const targetScroll = this.scrollContainer.scrollTop + absTop - scrollContainerRect.height / 3
 
     this.scrollContainer.scrollTo({
       top: Math.max(0, targetScroll),
-      behavior: 'smooth'
+      behavior: "smooth",
     })
   }
 
@@ -356,7 +366,7 @@ function mergeRects(rects: DOMRect[]): DOMRect[] {
         Math.min(last.left, current.left),
         last.top,
         Math.max(last.right, current.right) - Math.min(last.left, current.left),
-        Math.max(last.height, current.height)
+        Math.max(last.height, current.height),
       )
     } else {
       merged.push(DOMRect.fromRect(current))

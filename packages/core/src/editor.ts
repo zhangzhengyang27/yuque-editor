@@ -69,12 +69,36 @@ export interface YuqueEditorOptions {
  * ⚠️ 升级 doc.umd.js 后需同步核对；即使快照过时，也只会影响剔除项的完整度，不会破坏工具栏。
  */
 export const DEFAULT_TOOLBAR_ITEMS: readonly string[] = [
-  "cardSelect", "|",
-  "undo", "redo", "formatPainter", "clearFormat", "|",
-  "style", "fontsize", "bold", "italic", "strikethrough", "underline", "mixedTextStyle", "|",
-  "color", "bgColor", "|",
-  "alignment", "unorderedList", "orderedList", "indent", "lineHeight", "|",
-  "taskList", "link", "quote", "hr", "search", "correction"
+  "cardSelect",
+  "|",
+  "undo",
+  "redo",
+  "formatPainter",
+  "clearFormat",
+  "|",
+  "style",
+  "fontsize",
+  "bold",
+  "italic",
+  "strikethrough",
+  "underline",
+  "mixedTextStyle",
+  "|",
+  "color",
+  "bgColor",
+  "|",
+  "alignment",
+  "unorderedList",
+  "orderedList",
+  "indent",
+  "lineHeight",
+  "|",
+  "taskList",
+  "link",
+  "quote",
+  "hr",
+  "search",
+  "correction",
 ]
 
 const TOOLBAR_SEPARATOR = "|"
@@ -102,7 +126,7 @@ function normalizeToolbarItems(items: string[]): string[] {
  */
 export function buildToolbarConfig(
   toolbarItems?: string[],
-  disabledToolbarItems?: string[]
+  disabledToolbarItems?: string[],
 ): ThirdPartyEditorOptions["toolbar"] | undefined {
   if (toolbarItems != null) {
     return { agentConfig: { default: { items: [...toolbarItems] } } }
@@ -110,9 +134,7 @@ export function buildToolbarConfig(
   if (disabledToolbarItems == null) return undefined
 
   const disabled = new Set(disabledToolbarItems)
-  const items = normalizeToolbarItems(
-    DEFAULT_TOOLBAR_ITEMS.filter((item) => !disabled.has(item))
-  )
+  const items = normalizeToolbarItems(DEFAULT_TOOLBAR_ITEMS.filter((item) => !disabled.has(item)))
   return { agentConfig: { default: { items } } }
 }
 
@@ -189,23 +211,14 @@ interface ThirdPartyEditorOptions {
 interface ThirdPartyEditor {
   on?: (event: string, handler: (...args: unknown[]) => void) => void | (() => void)
   setDocument: (type: YuqueDocScheme, content: string) => void
-  getDocument: (
-    type: YuqueDocScheme,
-    options?: { includeMeta?: boolean }
-  ) => string
+  getDocument: (type: YuqueDocScheme, options?: { includeMeta?: boolean }) => string
   execCommand?: (command: string, ...args: unknown[]) => unknown
   destroy?: () => void
 }
 
 interface ThirdPartyDoc {
-  createOpenEditor?: (
-    container: HTMLElement,
-    options: ThirdPartyEditorOptions
-  ) => ThirdPartyEditor
-  createOpenViewer?: (
-    container: HTMLElement,
-    options: ThirdPartyEditorOptions
-  ) => ThirdPartyEditor
+  createOpenEditor?: (container: HTMLElement, options: ThirdPartyEditorOptions) => ThirdPartyEditor
+  createOpenViewer?: (container: HTMLElement, options: ThirdPartyEditorOptions) => ThirdPartyEditor
 }
 
 type ManagedLinkElement = HTMLLinkElement & {
@@ -274,8 +287,7 @@ function mergeAssets(assets?: Partial<YuqueEditorAssets>): YuqueEditorAssets {
 
 /** 是否开启调试日志，设置环境变量 YUQUE_EDITOR_DEBUG=1 启用 */
 const DEBUG =
-  typeof globalThis !== "undefined" &&
-  !!(globalThis as Record<string, unknown>).YUQUE_EDITOR_DEBUG
+  typeof globalThis !== "undefined" && !!(globalThis as Record<string, unknown>).YUQUE_EDITOR_DEBUG
 
 /**
  * 在销毁流程/竞态场景下，第三方编辑器内部可能会抛出各种 TypeError。
@@ -306,10 +318,7 @@ function loadStyleOnce(url: string): Promise<void> {
   if (assetLoaders.has(url)) return assetLoaders.get(url)!
 
   const p = new Promise<void>((resolve, reject) => {
-    const existing = findManagedElement<ManagedLinkElement>(
-      "link[data-yuque-asset]",
-      url
-    )
+    const existing = findManagedElement<ManagedLinkElement>("link[data-yuque-asset]", url)
     if (existing) {
       if (existing._yuqueFailed) {
         existing.remove()
@@ -343,19 +352,12 @@ function loadScriptOnce(url: string): Promise<void> {
   if (assetLoaders.has(url)) return assetLoaders.get(url)!
 
   const p = new Promise<void>((resolve, reject) => {
-    const existing = findManagedElement<ManagedScriptElement>(
-      "script[data-yuque-asset]",
-      url
-    )
+    const existing = findManagedElement<ManagedScriptElement>("script[data-yuque-asset]", url)
     if (existing) {
       const readyState = (existing as unknown as { readyState?: string }).readyState
       if (existing._yuqueFailed) {
         existing.remove()
-      } else if (
-        existing._yuqueLoaded ||
-        readyState === "loaded" ||
-        readyState === "complete"
-      ) {
+      } else if (existing._yuqueLoaded || readyState === "loaded" || readyState === "complete") {
         resolve()
       } else {
         existing.addEventListener("load", () => resolve(), { once: true })
@@ -363,8 +365,8 @@ function loadScriptOnce(url: string): Promise<void> {
           "error",
           () => reject(new Error(`Failed to load script: ${url}`)),
           {
-            once: true
-          }
+            once: true,
+          },
         )
       }
       return
@@ -397,18 +399,13 @@ function loadScriptOnce(url: string): Promise<void> {
  */
 async function ensureAssets(assets: YuqueEditorAssets) {
   // 第一层：CSS 并行加载
-  await Promise.all([
-    loadStyleOnce(assets.docCss),
-    loadStyleOnce(assets.antdCss)
-  ])
+  await Promise.all([loadStyleOnce(assets.docCss), loadStyleOnce(assets.antdCss)])
   // 第二层：React 依赖链 + 无依赖脚本并行
   await Promise.all([
     loadScriptOnce(assets.react),
     loadScriptOnce(assets.reactDom),
     loadScriptOnce(assets.codeMirror),
-    assets.katex
-      ? loadScriptOnce(assets.katex)
-      : Promise.resolve()
+    assets.katex ? loadScriptOnce(assets.katex) : Promise.resolve(),
   ])
   // 第三层：有严格顺序依赖的脚本串行
   await loadScriptOnce(assets.kitchenScript)
@@ -427,12 +424,18 @@ const BLOCK_BOUNDARY_SELECTOR =
  * 而 `DOMParser` 解析出的文档是惰性的，不会加载资源、不会执行脚本。
  *
  * ⚠️ 依赖 DOM API，仅限浏览器环境调用。
+ *
+ * @internal 供单元测试使用，不属于公开 API 的稳定承诺
  */
-function stripHtml(html: string): string {
+export function stripHtml(html: string): string {
   const parsed = new DOMParser().parseFromString(html, "text/html")
   const body = parsed.body
   if (!body) return ""
 
+  // script/style 的文本内容不属于正文，参与计数会造成误判
+  for (const el of Array.from(body.querySelectorAll("script,style"))) {
+    el.remove()
+  }
   for (const el of Array.from(body.querySelectorAll(BLOCK_BOUNDARY_SELECTOR))) {
     el.insertAdjacentText("beforebegin", " ")
     el.insertAdjacentText("afterend", " ")
@@ -444,7 +447,12 @@ function stripHtml(html: string): string {
   return (body.textContent ?? "").replace(/\s+/g, " ").trim()
 }
 
-function stripMarkdown(md: string): string {
+/**
+ * 提取 Markdown 的纯文本（代码块 / 链接 / 标记符号都会被剔除）。
+ *
+ * @internal 供单元测试使用，不属于公开 API 的稳定承诺
+ */
+export function stripMarkdown(md: string): string {
   return md
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/`[^`]*`/g, " ")
@@ -464,10 +472,9 @@ function stripMarkdown(md: string): string {
  *
  * 模块级常量可安全复用：`String.prototype.match` 在带 `g` 标志时会自行重置 `lastIndex`。
  */
-const CJK_CHAR_PATTERN =
-  /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af]/g
+const CJK_CHAR_PATTERN = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af]/g
 /** 按词计数：拉丁字母与数字，允许词内撇号/连字符 */
-const LATIN_WORD_PATTERN = /[A-Za-z0-9]+(?:['’\-][A-Za-z0-9]+)*/g
+const LATIN_WORD_PATTERN = /[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*/g
 
 function stripByScheme(content: string, scheme: YuqueDocScheme): string {
   if (scheme === "text/markdown") return stripMarkdown(content)
@@ -476,17 +483,13 @@ function stripByScheme(content: string, scheme: YuqueDocScheme): string {
   return stripHtml(content)
 }
 
-export async function createYuqueEditor(
-  options: YuqueEditorOptions
-): Promise<YuqueEditorRef> {
+export async function createYuqueEditor(options: YuqueEditorOptions): Promise<YuqueEditorRef> {
   const assets = mergeAssets(options.assets)
   await ensureAssets(assets)
 
   const doc = (window as Window & { Doc?: ThirdPartyDoc }).Doc
   if (!doc || (!doc.createOpenEditor && !doc.createOpenViewer)) {
-    throw new Error(
-      "yuque-editor-core：未检测到 window.Doc（doc.umd.js 可能未正确加载）"
-    )
+    throw new Error("yuque-editor-core：未检测到 window.Doc（doc.umd.js 可能未正确加载）")
   }
 
   let currentScheme: YuqueDocScheme = options.scheme ?? "text/html"
@@ -495,7 +498,7 @@ export async function createYuqueEditor(
     throw new Error(
       options.readOnly
         ? "yuque-editor-core：当前环境不支持只读查看器 createOpenViewer"
-        : "yuque-editor-core：当前环境不支持编辑器 createOpenEditor"
+        : "yuque-editor-core：当前环境不支持编辑器 createOpenEditor",
     )
   }
 
@@ -515,18 +518,18 @@ export async function createYuqueEditor(
     darkMode: !!options.darkMode,
     typography: {
       typography: "classic",
-      paragraphSpacing: options.paragraphSpacing ? "relax" : "default"
+      paragraphSpacing: options.paragraphSpacing ? "relax" : "default",
     },
     toc: {
-      enable: options.showToc ?? false
+      enable: options.showToc ?? false,
     },
     codeblock: {
       codemirrorURL: assets.codeMirror,
-      supportCustomStyle: true
+      supportCustomStyle: true,
     },
     math: assets.katex
       ? {
-          KaTexURL: assets.katex
+          KaTexURL: assets.katex,
         }
       : undefined,
     toolbar: toolbarConfig,
@@ -536,9 +539,9 @@ export async function createYuqueEditor(
             const type = request.type as "url" | "file" | "base64"
             return options.uploadImage!({
               type: type ?? "file",
-              data: request.data
+              data: request.data,
             })
-          }
+          },
         }
       : undefined,
     video: options.uploadVideo
@@ -547,11 +550,11 @@ export async function createYuqueEditor(
             const type = request.type as "url" | "file" | "base64"
             return options.uploadVideo!({
               type: type ?? "file",
-              data: request.data
+              data: request.data,
             })
-          }
+          },
         }
-      : undefined
+      : undefined,
   })
 
   let disposed = false
@@ -562,10 +565,7 @@ export async function createYuqueEditor(
   if (typeof editor?.on === "function") {
     const off = editor.on("contentchange", () => {
       if (disposed) return
-      const v = safeCall(
-        () => editor.getDocument(currentScheme, { includeMeta: true }),
-        ""
-      )
+      const v = safeCall(() => editor.getDocument(currentScheme, { includeMeta: true }), "")
       if (v === lastSetContent) {
         lastSetContent = "" // 只跳过一次
         return
@@ -648,10 +648,7 @@ export async function createYuqueEditor(
         }, undefined)
         return
       }
-      const current = safeCall(
-        () => editor.getDocument("text/html", { includeMeta: true }),
-        ""
-      )
+      const current = safeCall(() => editor.getDocument("text/html", { includeMeta: true }), "")
       safeCall(() => {
         editor.setDocument("text/html", `${current}${content}`)
         return undefined
@@ -672,18 +669,12 @@ export async function createYuqueEditor(
     },
     isEmpty() {
       if (disposed) return true
-      const doc = safeCall(
-        () => editor.getDocument(currentScheme, { includeMeta: true }),
-        ""
-      )
+      const doc = safeCall(() => editor.getDocument(currentScheme, { includeMeta: true }), "")
       return stripByScheme(doc, currentScheme).length === 0
     },
     getSummaryContent() {
       if (disposed) return ""
-      const doc = safeCall(
-        () => editor.getDocument(currentScheme, { includeMeta: true }),
-        ""
-      )
+      const doc = safeCall(() => editor.getDocument(currentScheme, { includeMeta: true }), "")
       return stripByScheme(doc, currentScheme)
     },
     wordCount() {
@@ -735,25 +726,63 @@ export async function createYuqueEditor(
       editorRoot.remove()
     },
     // === execCommand 封装 ===
-    undo() { exec("undo") },
-    redo() { exec("redo") },
-    insertText(text: string) { exec("insertText", text) },
-    setBold(value?: boolean) { exec("bold", value) },
-    setItalic(value?: boolean) { exec("italic", value) },
-    setUnderline(value?: boolean) { exec("underline", value) },
-    setStrikethrough(value?: boolean) { exec("strikethrough", value) },
-    setColor(color: string) { exec("color", color) },
-    setBgColor(color: string) { exec("bgColor", color) },
-    clearColor() { exec("clearColor") },
-    clearBgColor() { exec("clearBgColor") },
-    setAlignment(value) { exec("alignment", value) },
-    setParagraphStyle(style) { exec("style", style) },
-    setFontsize(size: number) { exec("fontsize", size) },
-    indent() { exec("indent") },
-    outdent() { exec("outdent") },
-    clearFormat() { exec("clearFormat") },
-    selectAll() { exec("selectAll") },
-    getWordCount() { return api.wordCount() }
+    undo() {
+      exec("undo")
+    },
+    redo() {
+      exec("redo")
+    },
+    insertText(text: string) {
+      exec("insertText", text)
+    },
+    setBold(value?: boolean) {
+      exec("bold", value)
+    },
+    setItalic(value?: boolean) {
+      exec("italic", value)
+    },
+    setUnderline(value?: boolean) {
+      exec("underline", value)
+    },
+    setStrikethrough(value?: boolean) {
+      exec("strikethrough", value)
+    },
+    setColor(color: string) {
+      exec("color", color)
+    },
+    setBgColor(color: string) {
+      exec("bgColor", color)
+    },
+    clearColor() {
+      exec("clearColor")
+    },
+    clearBgColor() {
+      exec("clearBgColor")
+    },
+    setAlignment(value) {
+      exec("alignment", value)
+    },
+    setParagraphStyle(style) {
+      exec("style", style)
+    },
+    setFontsize(size: number) {
+      exec("fontsize", size)
+    },
+    indent() {
+      exec("indent")
+    },
+    outdent() {
+      exec("outdent")
+    },
+    clearFormat() {
+      exec("clearFormat")
+    },
+    selectAll() {
+      exec("selectAll")
+    },
+    getWordCount() {
+      return api.wordCount()
+    },
   }
 
   return api
