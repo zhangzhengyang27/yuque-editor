@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { ref, onBeforeUnmount, nextTick, computed } from "vue"
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue"
 import { YuqueRichText } from "yuque-editor-core/vue"
-import type { YuqueEditorRef, YuqueDocScheme } from "yuque-editor-core/editor"
+import type { YuqueDocScheme, YuqueEditorRef, UploadResult } from "yuque-editor-core/editor"
 import { CommentManager } from "./comment/comment-manager"
 import type { Comment, CommentEvent, HighlightSelection } from "./comment/types"
 import { DEFAULT_USER } from "./comment/utils"
 import CommentPopover from "./comment/CommentPopover.vue"
 import CommentPanel from "./comment/CommentPanel.vue"
 import ReplyEditorPanel from "./comment/ReplyEditorPanel.vue"
-
 import "./comment/styles.css"
+import "./demo.css"
 
 const INITIAL_VALUE = `<h1>Hello Yuque Editor!</h1>
 <p>这是一个 <strong>Vue 示例</strong>，使用 yuque-editor-core 加载语雀编辑器。</p>
@@ -18,18 +18,120 @@ const INITIAL_VALUE = `<h1>Hello Yuque Editor!</h1>
   <li>富文本编辑 · 图片/视频上传</li>
   <li>工具栏 · 字号 · 对齐</li>
   <li>undo/redo · 加粗/斜体/下划线</li>
-  <li>字数统计 · 格式切换</li>
+  <li>字数统计 · 格式切换 · 划词评论</li>
 </ul>
-<h2>评论功能</h2>
-<p>选中任意文字，会出现「💬 评论」浮动按钮，点击即可添加评论。</p>
-<p>试试编辑上面的内容吧！</p>
+<p>试试编辑上面的内容吧！选中任意文字可添加评论。</p>
 `
 
+/** 模拟上传：真实项目里替换为自己的上传接口即可 */
+async function fakeUpload(params: { type: string; data: string | File }): Promise<UploadResult> {
+  console.log("[uploadImage] 触发上传：", params.type, params.data)
+  const size =
+    params.data instanceof File
+      ? params.data.size
+      : params.type === "base64"
+        ? Math.ceil(String(params.data).length * 0.75)
+        : 0
+  return {
+    url: `https://picsum.photos/seed/${Date.now()}/640/360`,
+    size,
+  }
+}
+
+const FONT_SIZES = [12, 15, 18, 22, 24, 29, 32]
+
+const FOREGROUND_COLORS = ["#FF6B00", "#1677FF", "#52C41A", "#F5222D", "#722ED1", "#000000"]
+
+const BACKGROUND_COLORS = ["#FFEB3B", "#E1F5FE", "#F3E5F5", "#E8F5E9", "#FFF3E0"]
+
+type ParagraphStyle = "p" | "h1" | "h2" | "h3" | "h4"
+
+const PARAGRAPH_STYLES: Array<{ value: ParagraphStyle; label: string }> = [
+  { value: "p", label: "正文" },
+  { value: "h1", label: "标题 1" },
+  { value: "h2", label: "标题 2" },
+  { value: "h3", label: "标题 3" },
+  { value: "h4", label: "标题 4" },
+]
+
+const ALIGNMENTS = ["left", "center", "right", "justify"] as const
+
+/** 对齐图标的横线坐标：[x1, x2, y] */
+const ALIGN_BARS: Record<(typeof ALIGNMENTS)[number], Array<[number, number, number]>> = {
+  left: [
+    [4, 16, 5],
+    [4, 12, 9],
+    [4, 16, 13],
+    [4, 12, 17],
+  ],
+  center: [
+    [6, 14, 5],
+    [8, 12, 9],
+    [6, 14, 13],
+    [8, 12, 17],
+  ],
+  right: [
+    [4, 16, 5],
+    [8, 16, 9],
+    [4, 16, 13],
+    [8, 16, 17],
+  ],
+  justify: [
+    [4, 16, 5],
+    [4, 16, 9],
+    [4, 16, 13],
+    [4, 16, 17],
+  ],
+}
+
+const EXPORT_SCHEMES: Array<{ scheme: YuqueDocScheme; label: string }> = [
+  { scheme: "text/html", label: "HTML" },
+  { scheme: "text/markdown", label: "Markdown" },
+  { scheme: "text/plain", label: "纯文本" },
+  { scheme: "text/lake", label: "Lake" },
+  { scheme: "json", label: "JSON" },
+]
+
+type Theme = "light" | "dark"
+
+/** 页面框架主题（Lake 编辑器内容区样式固定浅色，不受影响）；选择持久化到 localStorage */
+function initTheme(): Theme {
+  const saved = localStorage.getItem("yuque-demo-theme")
+  if (saved === "light" || saved === "dark") return saved
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+}
+
+const theme = ref<Theme>(initTheme())
+// immediate：挂载时立刻应用初始主题（否则刷新后 data-theme 缺失，页面回落浅色）
+watch(
+  theme,
+  (t) => {
+    document.documentElement.dataset.theme = t
+    localStorage.setItem("yuque-demo-theme", t)
+  },
+  { immediate: true },
+)
+const toggleTheme = () => {
+  theme.value = theme.value === "dark" ? "light" : "dark"
+}
+
+// ==================== 状态 ====================
+
+const editorRef = ref<YuqueEditorRef | null>(null)
+const editorContainerRef = ref<HTMLElement | null>(null)
 const content = ref(INITIAL_VALUE)
 const wordCount = ref(0)
-const editorRef = ref<YuqueEditorRef | null>(null)
-const editorContainerRef = ref<HTMLDivElement | null>(null)
+const empty = ref(false)
 const logs = ref<string[]>([])
+const showRail = ref(window.innerWidth >= 1080)
+const showPanel = ref(false)
+const comments = ref<Comment[]>([])
+const unresolvedCount = computed(() => comments.value.filter((c) => !c.resolved).length)
+const showPopover = ref(false)
+const popoverAnchor = ref<DOMRect | null>(null)
+const popoverHighlight = ref<HighlightSelection | null>(null)
+
+let commentManager: CommentManager | null = null
 
 // 字数统计需要全量序列化文档，长文档下开销大，对输入做防抖
 let wordCountTimer: ReturnType<typeof setTimeout> | null = null
@@ -38,19 +140,12 @@ function queueWordCount() {
   wordCountTimer = setTimeout(() => {
     wordCountTimer = null
     wordCount.value = editorRef.value?.wordCount() ?? 0
+    empty.value = editorRef.value?.isEmpty() ?? true
   }, 200)
 }
 
-// --- 评论系统状态 ---
-const comments = ref<Comment[]>([])
-const showPanel = ref(false)
-const showPopover = ref(false)
-const popoverAnchor = ref<DOMRect | null>(null)
-const popoverHighlight = ref<HighlightSelection | null>(null)
-let commentManager: CommentManager | null = null
-const unresolvedCount = computed(() => comments.value.filter((c) => !c.resolved).length)
+// ==================== 事件日志 ====================
 
-// === 日志 ===
 function addLog(msg: string) {
   const ts = new Date().toLocaleTimeString()
   logs.value.unshift(`[${ts}] ${msg}`)
@@ -61,15 +156,53 @@ function clearLogs() {
   logs.value = []
 }
 
-/** 刷新字数统计并写日志（模板按钮入口；多语句逻辑不放内联 handler） */
+/** 刷新字数统计并写日志（多语句逻辑不放内联 handler） */
 function logWordCount() {
   wordCount.value = editorRef.value?.wordCount() ?? 0
   addLog(`wordCount: ${wordCount.value}`)
 }
 
-function resetContent() {
-  content.value = "<p><strong>通过 setContent 重置的内容</strong></p>"
-  addLog("setContent: reset")
+// ==================== 编辑器事件 ====================
+
+function handleChange(v: string) {
+  content.value = v
+  queueWordCount()
+  // 内容变化后刷新划词高亮（路径基于 childIndices，编辑后已错位）
+  commentManager?.refreshHighlights()
+}
+
+function handleLoad() {
+  addLog("Editor loaded!")
+  wordCount.value = editorRef.value?.wordCount() ?? 0
+  initCommentSystem()
+}
+
+function handleError(err: Error) {
+  addLog(`ERROR: ${err.message}`)
+  console.error("Editor error:", err)
+}
+
+function handleFocus() {
+  addLog("focus")
+}
+
+function handleBlur() {
+  addLog("blur")
+}
+
+function handleSelectionChange() {
+  addLog("selectionchange")
+}
+
+// ==================== 工具栏命令 ====================
+
+function cmd(label: string, fn: () => void) {
+  try {
+    fn()
+    addLog(`exec: ${label}`)
+  } catch (e) {
+    addLog(`exec FAIL: ${label} — ${e instanceof Error ? e.message : String(e)}`)
+  }
 }
 
 function applyColor(c: string) {
@@ -82,65 +215,42 @@ function applyBgColor(c: string) {
   addLog(`setBgColor: ${c}`)
 }
 
-// === 编辑器事件 ===
-function handleLoad() {
-  addLog("Editor loaded!")
-  wordCount.value = editorRef.value?.wordCount() ?? 0
-  initCommentSystem()
+function applyParagraph(e: Event) {
+  const style = (e.target as HTMLSelectElement).value as ParagraphStyle
+  cmd(`style=${style}`, () => editorRef.value?.setParagraphStyle(style))
 }
 
-function handleError(err: Error) {
-  addLog(`ERROR: ${err.message}`)
-  console.error("Editor error:", err)
+function applyFontSize(e: Event) {
+  const size = Number((e.target as HTMLSelectElement).value)
+  cmd(`fontsize=${size}`, () => editorRef.value?.setFontsize(size))
 }
 
-function handleChange(v: string) {
-  content.value = v
-  queueWordCount()
-  // 内容变化后刷新划词高亮（路径基于 childIndices，编辑后已错位）
-  commentManager?.refreshHighlights()
+function applyAlignment(a: (typeof ALIGNMENTS)[number]) {
+  cmd(`alignment=${a}`, () => editorRef.value?.setAlignment(a))
 }
 
-function handleFocus() {
-  addLog("focus")
-}
-function handleBlur() {
-  addLog("blur")
-}
-function handleSelectionChange() {
-  addLog("selectionchange")
+// ==================== 检查器 ====================
+
+function resetContent() {
+  content.value = "<p><strong>通过 setContent 重置的内容</strong></p>"
+  addLog("setContent: reset")
 }
 
-// === 辅助方法 ===
 function getSummary() {
   const text = editorRef.value?.getSummaryContent() ?? ""
   addLog(`summary: "${text.slice(0, 60)}${text.length > 60 ? "…" : ""}"`)
 }
+
 function checkEmpty() {
-  const empty = editorRef.value?.isEmpty()
-  addLog(`isEmpty: ${empty}`)
+  addLog(`isEmpty: ${editorRef.value?.isEmpty()}`)
 }
 
-// === execCommand 封装 ===
-function cmd(label: string, fn: () => void) {
-  try {
-    fn()
-    addLog(`exec: ${label}`)
-  } catch (e) {
-    addLog(`exec FAIL: ${label} — ${e instanceof Error ? e.message : String(e)}`)
-  }
-}
-function getContent(scheme: YuqueDocScheme) {
+function exportAs(scheme: YuqueDocScheme) {
   const v = editorRef.value?.getContent(scheme) ?? ""
   addLog(`${scheme}: "${v.slice(0, 80)}${v.length > 80 ? "…" : ""}"`)
 }
 
 // ==================== 评论系统 ====================
-
-const PARAGRAPH_STYLES = ["p", "h1", "h2", "h3", "h4"] as const
-const ALIGNMENTS = ["left", "center", "right", "justify"] as const
-const FOREGROUND_COLORS = ["#FF6B00", "#1677FF", "#52C41A", "#F5222D", "#722ED1", "#000000"]
-const BACKGROUND_COLORS = ["#FFEB3B", "#E1F5FE", "#F3E5F5", "#E8F5E9", "#FFF3E0"]
 
 function initCommentSystem() {
   nextTick(() => {
@@ -152,7 +262,6 @@ function initCommentSystem() {
     const docContainer =
       (editorContainerRef.value.querySelector(".doc-container") as HTMLElement) ||
       (editorContainerRef.value.querySelector('[class*="lake-core"]') as HTMLElement) ||
-      (editorContainerRef.value.querySelector(".editor-wrapper") as HTMLElement) ||
       editorContainerRef.value
 
     commentManager = new CommentManager({
@@ -190,9 +299,11 @@ function handleReply(commentId: string, replyContent: string) {
 function handleResolve(commentId: string) {
   commentManager?.resolveComment(commentId)
 }
+
 function handleUnresolve(commentId: string) {
   commentManager?.unresolveComment(commentId)
 }
+
 function handleDelete(commentId: string) {
   if (confirm("确定要删除这条评论吗？")) {
     commentManager?.deleteComment(commentId)
@@ -202,20 +313,22 @@ function handleDelete(commentId: string) {
 function handleScrollTo(commentId: string) {
   commentManager?.scrollToComment(commentId)
 }
+
 function handleCommentHover(commentId: string) {
   commentManager?.setHoveredComment(commentId)
 }
+
 function handleCommentLeave() {
   commentManager?.setHoveredComment(null)
 }
+
 function handlePanelClose() {
   showPanel.value = false
   commentManager?.setHoveredComment(null)
 }
 
-// ==================== Reply Editor ====================
+// ==================== 底部回复编辑器 ====================
 
-const replyEditorRef = ref<InstanceType<typeof ReplyEditorPanel> | null>(null)
 const replies = ref<Array<{ id: string; content: string; time: Date }>>([])
 
 function handleReplySubmit(text: string) {
@@ -231,238 +344,336 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="app-layout">
-    <!-- 主内容区（评论面板打开时避让 380px） -->
-    <div class="app-main" :class="{ 'has-panel': showPanel }">
-      <div style="max-width: 960px; margin: 0 auto; padding: 20px 16px">
-        <h1 style="text-align: center; margin-bottom: 20px">Yuque Editor — Vue Demo</h1>
-
-        <!-- ===== 功能测试面板 ===== -->
-        <div class="test-panels">
-          <!-- 基础操作 -->
-          <div class="test-panel">
-            <div class="panel-title">基础操作</div>
-            <div class="panel-body">
-              <button class="cmd-btn" @click="getSummary">getSummaryContent</button>
-              <button class="cmd-btn" @click="checkEmpty">isEmpty</button>
-              <button class="cmd-btn" @click="logWordCount">wordCount</button>
-              <button class="cmd-btn" @click="resetContent">setContent</button>
-            </div>
-          </div>
-
-          <!-- 撤销/重做 -->
-          <div class="test-panel">
-            <div class="panel-title">撤销 / 重做</div>
-            <div class="panel-body">
-              <button class="cmd-btn" @click="cmd('undo', () => editorRef?.undo())">undo</button>
-              <button class="cmd-btn" @click="cmd('redo', () => editorRef?.redo())">redo</button>
-            </div>
-          </div>
-
-          <!-- 文字格式 -->
-          <div class="test-panel">
-            <div class="panel-title">文字格式</div>
-            <div class="panel-body">
-              <button class="cmd-btn" @click="cmd('bold', () => editorRef?.setBold())">
-                setBold
-              </button>
-              <button class="cmd-btn" @click="cmd('italic', () => editorRef?.setItalic())">
-                setItalic
-              </button>
-              <button class="cmd-btn" @click="cmd('underline', () => editorRef?.setUnderline())">
-                setUnderline
-              </button>
-              <button
-                class="cmd-btn"
-                @click="cmd('strikethrough', () => editorRef?.setStrikethrough())"
-              >
-                setStrikethrough
-              </button>
-              <button class="cmd-btn" @click="cmd('clearFormat', () => editorRef?.clearFormat())">
-                clearFormat
-              </button>
-            </div>
-          </div>
-
-          <!-- 颜色 -->
-          <div class="test-panel">
-            <div class="panel-title">颜色</div>
-            <div class="panel-body">
-              <div class="color-row">
-                <button
-                  v-for="c in FOREGROUND_COLORS"
-                  :key="c"
-                  :title="c"
-                  :style="{ background: c }"
-                  class="color-btn"
-                  @click="applyColor(c)"
-                />
-                <button class="cmd-btn" @click="cmd('clearColor', () => editorRef?.clearColor())">
-                  clearColor
-                </button>
-              </div>
-              <div class="color-row">
-                <button
-                  v-for="c in BACKGROUND_COLORS"
-                  :key="c"
-                  :title="c"
-                  :style="{ background: c }"
-                  class="color-btn"
-                  @click="applyBgColor(c)"
-                />
-              </div>
-            </div>
-          </div>
-
-          <!-- 段落样式 -->
-          <div class="test-panel">
-            <div class="panel-title">段落样式</div>
-            <div class="panel-body">
-              <button
-                v-for="s in PARAGRAPH_STYLES"
-                :key="s"
-                class="cmd-btn"
-                @click="cmd(`style=${s}`, () => editorRef?.setParagraphStyle(s))"
-              >
-                style: {{ s }}
-              </button>
-            </div>
-          </div>
-
-          <!-- 对齐/缩进 -->
-          <div class="test-panel">
-            <div class="panel-title">对齐 / 缩进</div>
-            <div class="panel-body">
-              <button
-                v-for="a in ALIGNMENTS"
-                :key="a"
-                class="cmd-btn"
-                @click="cmd(`alignment=${a}`, () => editorRef?.setAlignment(a))"
-              >
-                {{ a }}
-              </button>
-              <button class="cmd-btn" @click="cmd('indent', () => editorRef?.indent())">
-                indent
-              </button>
-              <button class="cmd-btn" @click="cmd('outdent', () => editorRef?.outdent())">
-                outdent
-              </button>
-            </div>
-          </div>
-
-          <!-- 字号 -->
-          <div class="test-panel">
-            <div class="panel-title">字号</div>
-            <div class="panel-body">
-              <button
-                v-for="sz in [12, 15, 18, 22, 24, 29, 32]"
-                :key="sz"
-                class="cmd-btn"
-                @click="cmd(`fontsize=${sz}`, () => editorRef?.setFontsize(sz))"
-              >
-                {{ sz }}px
-              </button>
-            </div>
-          </div>
-
-          <!-- 焦点/光标 -->
-          <div class="test-panel">
-            <div class="panel-title">焦点 / 光标</div>
-            <div class="panel-body">
-              <button class="cmd-btn" @click="cmd('focusToStart', () => editorRef?.focusToStart())">
-                focusToStart
-              </button>
-              <button class="cmd-btn" @click="cmd('selectAll', () => editorRef?.selectAll())">
-                selectAll
-              </button>
-            </div>
-          </div>
-
-          <!-- 格式切换 -->
-          <div class="test-panel">
-            <div class="panel-title">格式切换 (getContent)</div>
-            <div class="panel-body">
-              <button
-                v-for="s in ['text/html', 'text/markdown', 'text/plain', 'text/lake', 'json']"
-                :key="s"
-                class="cmd-btn"
-                @click="getContent(s as YuqueDocScheme)"
-              >
-                {{ s }}
-              </button>
-            </div>
-          </div>
+  <div class="app">
+    <!-- ===== 顶栏 ===== -->
+    <header class="app-header">
+      <div class="header-inner">
+        <div class="brand">
+          <svg class="brand-mark" viewBox="0 0 28 28" width="28" height="28" aria-hidden="true">
+            <rect width="28" height="28" rx="8" fill="var(--accent)" />
+            <path
+              d="M8.5 19.5c5.5-.8 9.6-5.2 10.8-11-6 .9-10.2 5.2-10.8 11z"
+              fill="#fff"
+              opacity="0.95"
+            />
+          </svg>
+          <span class="brand-name">Yuque Editor</span>
+          <span class="brand-tag">Vue Demo</span>
         </div>
-
-        <!-- ===== 编辑器 + 状态栏 ===== -->
-        <div class="toolbar">
+        <div class="header-actions">
           <button
-            class="toolbar-btn"
+            type="button"
+            class="ghost-btn"
             :class="{ active: showPanel }"
+            :aria-pressed="showPanel"
+            title="打开评论面板"
             @click="showPanel = !showPanel"
           >
-            💬 评论 <span v-if="unresolvedCount > 0" class="badge">{{ unresolvedCount }}</span>
+            评论
+            <span v-if="unresolvedCount > 0" class="badge">{{ unresolvedCount }}</span>
           </button>
-          <span class="word-count">字数: {{ wordCount }}</span>
-          <span class="word-count">长度: {{ content.length }}</span>
+          <button
+            type="button"
+            class="ghost-btn"
+            :class="{ active: showRail }"
+            :aria-pressed="showRail"
+            title="显示 / 隐藏检查器与事件日志"
+            @click="showRail = !showRail"
+          >
+            控制台
+          </button>
+          <button
+            type="button"
+            class="ghost-btn icon-only"
+            :aria-label="theme === 'dark' ? '切换到浅色主题' : '切换到深色主题'"
+            :title="theme === 'dark' ? '切换到浅色主题' : '切换到深色主题'"
+            @click="toggleTheme"
+          >
+            {{ theme === "dark" ? "☀" : "☾" }}
+          </button>
         </div>
+      </div>
+    </header>
 
-        <div ref="editorContainerRef" class="editor-wrapper">
-          <YuqueRichText
-            ref="editorRef"
-            :value="content"
-            show-toolbar
-            @change="handleChange"
-            @load="handleLoad"
-            @error="handleError"
-            @focus="handleFocus"
-            @blur="handleBlur"
-            @selectionchange="handleSelectionChange"
-          />
-        </div>
-
-        <!-- ===== 事件日志 ===== -->
-        <div class="log-section">
-          <div class="log-header">
-            <span style="font-size: 13px; font-weight: 600; color: #ddd">事件日志</span>
-            <button class="cmd-btn" style="font-size: 11px; padding: 2px 8px" @click="clearLogs">
-              清空
+    <!-- ===== 工作区 ===== -->
+    <div class="workspace" :class="{ 'rail-hidden': !showRail }">
+      <section class="main-col">
+        <!-- 分组工具栏（execCommand 演示） -->
+        <div class="toolbar card" role="toolbar" aria-label="编辑器命令工具栏">
+          <div class="tool-group">
+            <button
+              type="button"
+              class="tool-btn"
+              title="撤销 (undo)"
+              aria-label="撤销"
+              @click="cmd('undo', () => editorRef?.undo())"
+            >
+              ↺
+            </button>
+            <button
+              type="button"
+              class="tool-btn"
+              title="重做 (redo)"
+              aria-label="重做"
+              @click="cmd('redo', () => editorRef?.redo())"
+            >
+              ↻
             </button>
           </div>
-          <div class="log-box">
-            <div v-if="logs.length === 0" style="color: #555; font-size: 12px">
-              操作编辑器，事件日志将显示在这里…
-            </div>
-            <div
-              v-for="(log, i) in logs"
-              :key="i"
-              :style="{
-                color: i === 0 ? '#4fc3f7' : '#ccc',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-all',
-                lineHeight: 1.6,
-                fontSize: 12,
-              }"
+
+          <span class="tool-divider" />
+
+          <div class="tool-group">
+            <button
+              type="button"
+              class="tool-btn text-bold"
+              title="加粗 (setBold)"
+              @click="cmd('bold', () => editorRef?.setBold())"
             >
-              {{ log }}
-            </div>
+              B
+            </button>
+            <button
+              type="button"
+              class="tool-btn text-italic"
+              title="斜体 (setItalic)"
+              @click="cmd('italic', () => editorRef?.setItalic())"
+            >
+              I
+            </button>
+            <button
+              type="button"
+              class="tool-btn text-underline"
+              title="下划线 (setUnderline)"
+              @click="cmd('underline', () => editorRef?.setUnderline())"
+            >
+              U
+            </button>
+            <button
+              type="button"
+              class="tool-btn text-strike"
+              title="删除线 (setStrikethrough)"
+              @click="cmd('strikethrough', () => editorRef?.setStrikethrough())"
+            >
+              S
+            </button>
+            <button
+              type="button"
+              class="tool-btn"
+              title="清除格式 (clearFormat)"
+              @click="cmd('clearFormat', () => editorRef?.clearFormat())"
+            >
+              <span class="tool-clear">清除</span>
+            </button>
+          </div>
+
+          <span class="tool-divider" />
+
+          <div class="tool-group">
+            <span class="swatch-row">
+              <button
+                v-for="c in FOREGROUND_COLORS"
+                :key="c"
+                type="button"
+                class="swatch"
+                :style="{ background: c }"
+                :title="`字色 ${c}`"
+                :aria-label="`字色 ${c}`"
+                @click="applyColor(c)"
+              />
+            </span>
+            <button
+              type="button"
+              class="tool-btn"
+              title="清除字色 (clearColor)"
+              @click="cmd('clearColor', () => editorRef?.clearColor())"
+            >
+              <span class="tool-clear">清字色</span>
+            </button>
+          </div>
+
+          <div class="tool-group">
+            <span class="swatch-row">
+              <button
+                v-for="c in BACKGROUND_COLORS"
+                :key="c"
+                type="button"
+                class="swatch"
+                :style="{ background: c }"
+                :title="`底色 ${c}`"
+                :aria-label="`底色 ${c}`"
+                @click="applyBgColor(c)"
+              />
+            </span>
+            <button
+              type="button"
+              class="tool-btn"
+              title="清除底色 (clearBgColor)"
+              @click="cmd('clearBgColor', () => editorRef?.clearBgColor())"
+            >
+              <span class="tool-clear">清底色</span>
+            </button>
+          </div>
+
+          <span class="tool-divider" />
+
+          <div class="tool-group">
+            <select
+              class="tool-select"
+              title="段落样式"
+              aria-label="段落样式"
+              @change="applyParagraph"
+            >
+              <option v-for="style in PARAGRAPH_STYLES" :key="style.value" :value="style.value">
+                {{ style.label }}
+              </option>
+            </select>
+            <select class="tool-select" title="字号" aria-label="字号" @change="applyFontSize">
+              <option v-for="size in FONT_SIZES" :key="size" :value="size">{{ size }}px</option>
+            </select>
+          </div>
+
+          <span class="tool-divider" />
+
+          <div class="tool-group">
+            <button
+              v-for="a in ALIGNMENTS"
+              :key="a"
+              type="button"
+              class="tool-btn"
+              :title="`对齐 ${a} (setAlignment)`"
+              :aria-label="`对齐 ${a}`"
+              @click="applyAlignment(a)"
+            >
+              <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+                <line
+                  v-for="(b, i) in ALIGN_BARS[a]"
+                  :key="i"
+                  :x1="b[0]"
+                  :y1="b[2]"
+                  :x2="b[1]"
+                  :y2="b[2]"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="tool-btn"
+              title="增加缩进 (indent)"
+              aria-label="增加缩进"
+              @click="cmd('indent', () => editorRef?.indent())"
+            >
+              ⇥
+            </button>
+            <button
+              type="button"
+              class="tool-btn"
+              title="减少缩进 (outdent)"
+              aria-label="减少缩进"
+              @click="cmd('outdent', () => editorRef?.outdent())"
+            >
+              ⇤
+            </button>
           </div>
         </div>
 
-        <details class="html-viewer">
-          <summary style="cursor: pointer; color: #666; font-size: 13px">查看原始 HTML</summary>
-          <pre
-            style="
-              background: #f5f5f5;
-              padding: 12px;
-              border-radius: 4px;
-              overflow: auto;
-              max-height: 200px;
-              font-size: 12px;
-            "
-            >{{ content }}</pre>
-        </details>
-      </div>
+        <!-- 编辑器主卡片 -->
+        <div class="editor-card card">
+          <div ref="editorContainerRef" class="editor-shell">
+            <YuqueRichText
+              ref="editorRef"
+              :value="content"
+              show-toolbar
+              show-toc
+              :upload-image="fakeUpload"
+              @change="handleChange"
+              @load="handleLoad"
+              @error="handleError"
+              @focus="handleFocus"
+              @blur="handleBlur"
+              @selectionchange="handleSelectionChange"
+            />
+          </div>
+          <div class="editor-foot">
+            <span class="pill">
+              字数<b>{{ wordCount }}</b>
+            </span>
+            <span class="pill">
+              字符<b>{{ content.length }}</b>
+            </span>
+            <span class="pill">
+              isEmpty<b>{{ empty ? "true" : "false" }}</b>
+            </span>
+            <span class="foot-hint">粘贴图片可触发 uploadImage（结果见浏览器控制台）</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 右侧：检查器 + 事件日志 ===== -->
+      <aside v-if="showRail" class="rail">
+        <section class="rail-section card">
+          <h2 class="rail-title">检查器</h2>
+          <div class="inspector-grid">
+            <button type="button" class="cell-btn" @click="resetContent">重置内容</button>
+            <button type="button" class="cell-btn" @click="getSummary">纯文本摘要</button>
+            <button type="button" class="cell-btn" @click="checkEmpty">isEmpty</button>
+            <button type="button" class="cell-btn" @click="logWordCount">字数统计</button>
+            <button
+              type="button"
+              class="cell-btn"
+              @click="cmd('focusToStart', () => editorRef?.focusToStart())"
+            >
+              光标至开头
+            </button>
+            <button
+              type="button"
+              class="cell-btn"
+              @click="cmd('selectAll', () => editorRef?.selectAll())"
+            >
+              全选
+            </button>
+          </div>
+
+          <h2 class="rail-title" style="margin-top: 16px">导出格式</h2>
+          <div class="scheme-row">
+            <button
+              v-for="{ scheme, label } in EXPORT_SCHEMES"
+              :key="scheme"
+              type="button"
+              class="cell-btn"
+              @click="exportAs(scheme)"
+            >
+              {{ label }}
+            </button>
+          </div>
+
+          <p class="rail-hint">
+            命令结果输出到下方事件日志。选中文字可添加划词评论，粘贴一张图片即可触发 uploadImage
+            模拟上传。
+          </p>
+        </section>
+
+        <section class="rail-section card logs-section">
+          <div class="logs-head">
+            <h2 class="rail-title">
+              事件日志 <span class="count">{{ logs.length }}</span>
+            </h2>
+            <button type="button" class="text-btn" @click="clearLogs">清空</button>
+          </div>
+          <div class="logs">
+            <template v-if="logs.length === 0">
+              <span class="logs-empty">操作编辑器，事件日志将显示在这里…</span>
+            </template>
+            <template v-else>
+              <div v-for="(log, i) in logs" :key="i" class="log-line" :class="{ latest: i === 0 }">
+                {{ log }}
+              </div>
+            </template>
+          </div>
+        </section>
+      </aside>
     </div>
 
     <!-- 评论弹窗 -->
@@ -487,136 +698,16 @@ onBeforeUnmount(() => {
       @leave="handleCommentLeave"
       @close="handlePanelClose"
     />
-  </div>
 
-  <!-- 底部回复编辑器（fixed 定位，评论面板打开时右侧避让） -->
-  <div class="reply-editor-wrapper" :class="{ 'has-panel': showPanel }">
-    <ReplyEditorPanel
-      ref="replyEditorRef"
-      placeholder="输入回复内容，支持富文本格式…"
-      @submit="handleReplySubmit"
-    />
+    <!-- 底部回复编辑器（fixed 定位，评论面板打开时右侧避让） -->
+    <div class="reply-editor-wrapper" :class="{ 'has-panel': showPanel }">
+      <ReplyEditorPanel placeholder="输入回复内容，支持富文本格式…" @submit="handleReplySubmit" />
+    </div>
   </div>
 </template>
 
 <style>
-body {
-  margin: 0;
-  background: #fff;
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-}
-
-.app-layout {
-  display: flex;
-  min-height: 100vh;
-}
-
-.app-main {
-  flex: 1;
-  min-width: 0;
-  transition: margin-right 0.25s ease;
-}
-
-.app-main.has-panel {
-  margin-right: 380px;
-}
-
-/* ===== 功能测试面板 ===== */
-.test-panels {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.test-panel {
-  background: #fff;
-  border: 1px solid #e8e8e8;
-  border-radius: 8px;
-  padding: 8px 10px;
-}
-
-.panel-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #555;
-  margin-bottom: 8px;
-  border-bottom: 1px solid #f0f0f0;
-  padding-bottom: 5px;
-}
-
-.panel-body {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.cmd-btn {
-  font-size: 12px;
-  padding: 3px 8px;
-  border: 1px solid #d9d9d9;
-  border-radius: 4px;
-  background: #fff;
-  cursor: pointer;
-  color: #333;
-  white-space: nowrap;
-  transition: all 0.15s;
-}
-
-.cmd-btn:hover {
-  border-color: #1677ff;
-  color: #1677ff;
-}
-
-.color-row {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.color-btn {
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
-  border: 1px solid #ddd;
-  cursor: pointer;
-  padding: 0;
-}
-
-/* ===== 编辑器工具栏 ===== */
-.toolbar {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 12px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.toolbar-btn {
-  padding: 5px 14px;
-  font-size: 13px;
-  border: 1px solid #d9d9d9;
-  border-radius: 6px;
-  background: #fff;
-  cursor: pointer;
-  color: #333;
-  transition: all 0.15s;
-}
-
-.toolbar-btn:hover {
-  border-color: #1677ff;
-  color: #1677ff;
-}
-
-.toolbar-btn.active {
-  border-color: #1677ff;
-  color: #1677ff;
-  background: #e6f4ff;
-}
-
+/* Vue 示例特有：评论徽标与底部回复编辑器定位 */
 .badge {
   display: inline-block;
   background: #ff4d4f;
@@ -629,53 +720,6 @@ body {
   text-align: center;
 }
 
-.word-count {
-  color: #999;
-  font-size: 13px;
-}
-
-.editor-wrapper {
-  border: 1px solid #e8e8e8;
-  border-radius: 8px;
-  overflow: hidden;
-  margin-bottom: 16px;
-}
-
-/* ===== 事件日志 ===== */
-.log-section {
-  margin-bottom: 16px;
-}
-
-.log-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-
-.log-box {
-  background: #1e1e1e;
-  border-radius: 6px;
-  padding: 10px 12px;
-  height: 160px;
-  overflow-y: auto;
-  font-family: "SF Mono", Monaco, Menlo, monospace;
-}
-
-.html-viewer {
-  margin-bottom: 16px;
-}
-
-.html-viewer pre {
-  background: #f5f5f5;
-  padding: 12px;
-  border-radius: 4px;
-  overflow: auto;
-  max-height: 200px;
-  font-size: 12px;
-}
-
-/* 底部回复编辑器样式 */
 .reply-editor-wrapper {
   position: fixed;
   bottom: 0;
@@ -691,8 +735,7 @@ body {
   right: 380px;
 }
 
-/* 主内容区增加底部间距，避免被回复编辑器遮挡 */
-.app-main {
-  padding-bottom: 160px;
+.workspace {
+  padding-bottom: 180px;
 }
 </style>
