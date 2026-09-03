@@ -43,6 +43,8 @@ export class CommentManager {
 
   // --- 内部状态 ---
   private _disposed = false
+  /** scrollToComment 的「3 秒后取消激活」定时器 */
+  private _activeTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(options: CommentSystemOptions) {
     this.container = options.container
@@ -152,10 +154,24 @@ export class CommentManager {
     this.highlightEngine.setActive(commentId)
     this.highlightEngine.scrollToHighlight(commentId)
 
-    // 3秒后取消激活状态
-    setTimeout(() => {
+    // 3秒后取消激活状态（定时器随 destroy 一起清理，避免操作已销毁的引擎）
+    this.clearActiveTimer()
+    this._activeTimer = setTimeout(() => {
+      this._activeTimer = null
+      if (this._disposed) return
       this.highlightEngine.setActive(null)
     }, 3000)
+  }
+
+  /**
+   * 编辑器内容变化后刷新高亮。
+   *
+   * 高亮位置用 childIndices 路径序列化，内容一经编辑就会错位；宿主应在编辑器
+   * `@change` 时调用本方法，让高亮跟随内容重绘。引擎内部做了 rAF 节流。
+   */
+  refreshHighlights() {
+    if (this._disposed) return
+    this.highlightEngine.redrawOnContentChange()
   }
 
   /** 设置悬浮高亮 */
@@ -194,7 +210,12 @@ export class CommentManager {
     const listeners = this.eventListeners.get(event.type)
     if (listeners) {
       for (const cb of listeners) {
-        try { cb(event) } catch { /* 静默 */ }
+        try {
+          cb(event)
+        } catch (e) {
+          // 监听器回调异常不应阻断评论系统，但必须暴露出来便于排查
+          console.error(`[comment-manager] listener error on "${event.type}":`, e)
+        }
       }
     }
   }
@@ -203,13 +224,22 @@ export class CommentManager {
     this.onChangeCallback?.([...this.comments])
   }
 
-  /** 查找最近的滚动容器 */
+  /** 查找最近的真正可滚动容器 */
   private findScrollContainer(el: HTMLElement): HTMLElement {
+    const canScroll = (value: string): boolean =>
+      value === 'auto' || value === 'scroll' || value === 'overlay'
+
     let current = el.parentElement
     while (current) {
       const style = getComputedStyle(current)
-      const overflow = style.overflow + style.overflowY
-      if (overflow.includes('auto') || overflow.includes('scroll')) {
+      // 按轴分别判断，避免原实现 `overflow + overflowY` 拼接导致
+      // 「overflow:hidden + overflowY:auto」这类元素被误判成滚动容器
+      const xScrollable = canScroll(style.overflowX) || canScroll(style.overflow)
+      const yScrollable = canScroll(style.overflowY) || canScroll(style.overflow)
+      if ((xScrollable || yScrollable) &&
+        (style.overflow === 'scroll' || style.overflowX === 'scroll' || style.overflowY === 'scroll' ||
+          current.scrollHeight > current.clientHeight ||
+          current.scrollWidth > current.clientWidth)) {
         return current
       }
       current = current.parentElement
@@ -234,6 +264,7 @@ export class CommentManager {
 
     // 延迟一帧，确保 selection 已更新
     requestAnimationFrame(() => {
+      if (this._disposed) return
       const selection = window.getSelection()
       if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
         this.hideFloatingButton()
@@ -323,10 +354,13 @@ export class CommentManager {
 
   /** 销毁管理器，清理所有资源 */
   destroy() {
+    if (this._disposed) return
     this._disposed = true
     this.container.removeEventListener('mouseup', this.onMouseUp)
     this.container.removeEventListener('keyup', this.onMouseUp)
     document.removeEventListener('click', this.onDocumentClick)
+
+    this.clearActiveTimer()
 
     if (this.floatingBtn) {
       this.floatingBtn.remove()
@@ -335,5 +369,12 @@ export class CommentManager {
 
     this.highlightEngine.destroy()
     this.eventListeners.clear()
+  }
+
+  private clearActiveTimer() {
+    if (this._activeTimer) {
+      clearTimeout(this._activeTimer)
+      this._activeTimer = null
+    }
   }
 }

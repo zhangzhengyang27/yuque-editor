@@ -6,6 +6,9 @@
  * 2. Canvas pointer-events: none，不阻挡底层交互
  * 3. 通过 DOM Range API 计算选区位置，在 Canvas 上绘制高亮矩形
  * 4. 使用 XPath-like childIndices 路径序列化位置，支持跨会话持久化
+ *
+ * 局限说明：childIndices 路径只在内容未变化时成立。编辑内容后路径会错位，
+ * 宿主应在内容变更时主动调用 `redraw()`（见 CommentManager.redraw / App 的 @change）。
  */
 
 import type { HighlightSelection } from './types'
@@ -96,6 +99,11 @@ export class HighlightEngine {
   private hoveredId: string | null = null
   private _resizeObserver: ResizeObserver | null = null
   private _scrollBound = false
+  /** 取消 scroll / contentchange 监听的信号，destroy 时统一释放 */
+  private _abort = new AbortController()
+  /** 内容变化触发的高亮刷新节流（避免输入过快时每帧都同步重绘） */
+  private _redrawQueued = false
+  private _disposed = false
 
   constructor(options: HighlightEngineOptions) {
     this.container = options.container
@@ -126,7 +134,7 @@ export class HighlightEngine {
   /** 确保容器是定位上下文，Canvas 正确定位 */
   private setupResize() {
     this._resizeObserver = new ResizeObserver(() => {
-      this.resizeCanvas()
+      if (this._disposed) return
       this.redraw()
     })
     this._resizeObserver.observe(this.container)
@@ -137,26 +145,52 @@ export class HighlightEngine {
     if (this._scrollBound) return
     this._scrollBound = true
 
-    const update = () => {
-      this.redraw()
-      requestAnimationFrame(update)
-    }
-    // 使用 IntersectionObserver + scroll 事件来高效检测可见性
-    this.scrollContainer.addEventListener('scroll', () => {
-      this.redraw()
-    }, { passive: true })
+    // scroll 事件高频触发：先同步重绘，再安排一次 rAF 兜底
+    // （某些浏览器滚动期间 scroll 事件可能不是每帧都触发）
+    const { signal } = this._abort
+    this.scrollContainer.addEventListener(
+      'scroll',
+      () => {
+        if (this._disposed) return
+        this.redraw()
+        this.scheduleRedraw()
+      },
+      { passive: true, signal }
+    )
   }
 
-  /** 同步 Canvas 尺寸与容器 */
-  resizeCanvas() {
-    const rect = this.container.getBoundingClientRect()
+  /**
+   * 内容变化后的重绘。由宿主在编辑器 change 事件里调用（App.vue @change）。
+   * 内部用 rAF 节流，避免高频输入逐字符同步重绘整张画布。
+   */
+  redrawOnContentChange() {
+    if (this._disposed) return
+    this.scheduleRedraw()
+  }
+
+  private scheduleRedraw() {
+    if (this._redrawQueued) return
+    this._redrawQueued = true
+    requestAnimationFrame(() => {
+      this._redrawQueued = false
+      if (this._disposed) return
+      this.redraw()
+    })
+  }
+
+  /** 同步 Canvas 尺寸与容器（仅在尺寸变化时重建，避免每次重绘分配 backing store） */
+  private ensureCanvasSize(rect: DOMRect) {
     const dpr = window.devicePixelRatio || 1
-    this.canvas.width = rect.width * dpr
-    this.canvas.height = rect.height * dpr
-    this.canvas.style.width = `${rect.width}px`
-    this.canvas.style.height = `${rect.height}px`
-    const ctx = this.canvas.getContext('2d')
-    if (ctx) ctx.scale(dpr, dpr)
+    const width = Math.max(1, Math.round(rect.width * dpr))
+    const height = Math.max(1, Math.round(rect.height * dpr))
+    if (this.canvas.width !== width || this.canvas.height !== height) {
+      this.canvas.width = width
+      this.canvas.height = height
+      this.canvas.style.width = `${rect.width}px`
+      this.canvas.style.height = `${rect.height}px`
+      const ctx = this.canvas.getContext('2d')
+      if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    }
   }
 
   /** 添加/更新一条高亮 */
@@ -226,13 +260,14 @@ export class HighlightEngine {
 
   /** 重绘所有高亮 */
   redraw() {
+    if (this._disposed) return
     const ctx = this.canvas.getContext('2d')
     if (!ctx) return
 
-    this.resizeCanvas()
     const containerRect = this.container.getBoundingClientRect()
+    this.ensureCanvasSize(containerRect)
 
-    // 清空画布
+    // 清空画布（ensureCanvasSize 重建尺寸时已隐含清空，这里统一再清一次）
     ctx.clearRect(0, 0, containerRect.width, containerRect.height)
 
     for (const [id, entry] of this.entries) {
@@ -293,7 +328,12 @@ export class HighlightEngine {
 
   /** 销毁引擎，清理资源 */
   destroy() {
+    if (this._disposed) return
+    this._disposed = true
+    // 统一取消 scroll 监听（此前是匿名函数无法移除，滚动会导致闭包泄漏）
+    this._abort.abort()
     this._resizeObserver?.disconnect()
+    this._resizeObserver = null
     this.canvas.remove()
     this.entries.clear()
   }

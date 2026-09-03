@@ -64,6 +64,8 @@ function handleError(err: Error) {
 function handleChange(v: string) {
   content.value = v
   wordCount.value = editorRef.value?.wordCount() ?? 0
+  // 内容变化后刷新划词高亮（路径基于 childIndices，编辑后已错位）
+  commentManager?.refreshHighlights()
 }
 
 function handleFocus() { addLog('focus') }
