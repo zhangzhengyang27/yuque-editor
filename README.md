@@ -94,8 +94,8 @@ npm login
 npm publish --access public
 
 # 6. 打 git tag
-git tag v0.0.7
-git push origin v0.0.7
+git tag v0.0.8
+git push origin v0.0.8
 ```
 
 > **注意**：每次发布前务必先执行 `pnpm run build`，确保 dist 目录包含最新的编译产物。

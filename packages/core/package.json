@@ -1,7 +1,7 @@
 {
   "name": "yuque-editor-core",
   "description": "Yuque/Lake editor core with offline assets",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "license": "MIT",
   "keywords": [
     "yuque",

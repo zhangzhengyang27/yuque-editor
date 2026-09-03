@@ -7,3 +7,6 @@ dist
 # Vite dev/build 临时目录；离线资源由 yuque-editor-core 的 vite 插件在运行时按需提供，
 # 不应提交构建产物（旧版本插件曾把资源复制进 public/yuque-assets）
 public/yuque-assets
+
+# npm pack 残留
+*.tgz
