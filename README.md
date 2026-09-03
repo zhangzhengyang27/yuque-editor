@@ -26,6 +26,12 @@ pnpm run build
 # 运行单元测试
 pnpm test
 
+# 代码检查 / 格式化
+pnpm lint        # ESLint（flat config，见 eslint.config.mjs）
+pnpm lint:fix
+pnpm format      # Prettier（配置见 .prettierrc.json）
+pnpm format:check
+
 # 启动 React 示例
 pnpm run dev:react
 
@@ -33,7 +39,9 @@ pnpm run dev:react
 pnpm run dev:vue
 ```
 
-推送 / PR 时 GitHub Actions 会自动执行：单测 → 构建 core → 双示例类型检查 → 产物子路径 Node 解析校验（`scripts/verify-dist.mjs`）。
+> 格式由 Prettier 统一负责；ESLint 只管代码质量与框架规则（`eslint-config-prettier` 已关闭所有格式类规则）。`docs/` 教程与 `packages/core/assets/` 第三方离线资源不参与格式化。
+
+推送 / PR 时 GitHub Actions 会自动执行：Lint → 格式检查 → 单测 → 构建 core → 双示例类型检查 → 产物子路径 Node 解析校验（`scripts/verify-dist.mjs`）。
 
 ## 包说明
 

@@ -1,32 +1,32 @@
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
-import type { Comment } from './types'
-import { formatRelativeTime, getUserInitial } from './utils'
+import { ref, computed, nextTick } from "vue"
+import type { Comment } from "./types"
+import { formatRelativeTime, getUserInitial } from "./utils"
 
 defineProps<{
   comment: Comment
 }>()
 
 const emit = defineEmits<{
-  (e: 'reply', content: string): void
-  (e: 'resolve'): void
-  (e: 'unresolve'): void
-  (e: 'delete'): void
-  (e: 'hover'): void
-  (e: 'leave'): void
-  (e: 'scroll-to'): void
+  (e: "reply", content: string): void
+  (e: "resolve"): void
+  (e: "unresolve"): void
+  (e: "delete"): void
+  (e: "hover"): void
+  (e: "leave"): void
+  (e: "scroll-to"): void
 }>()
 
 const showReplyInput = ref(false)
-const replyText = ref('')
+const replyText = ref("")
 const replyInputRef = ref<HTMLTextAreaElement | null>(null)
 
 const canSubmitReply = computed(() => replyText.value.trim().length > 0)
 
 function handleReply() {
   if (!canSubmitReply.value) return
-  emit('reply', replyText.value.trim())
-  replyText.value = ''
+  emit("reply", replyText.value.trim())
+  replyText.value = ""
   showReplyInput.value = false
 }
 
@@ -40,14 +40,14 @@ function toggleReply() {
 }
 
 function onSubmitReply(e: Event) {
-  if (e instanceof KeyboardEvent && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+  if (e instanceof KeyboardEvent && e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
     e.preventDefault()
     handleReply()
   }
 }
 
 function handleCardClick() {
-  emit('scroll-to')
+  emit("scroll-to")
 }
 </script>
 
@@ -72,8 +72,8 @@ function handleCardClick() {
     <div
       v-if="comment.highlight"
       class="yuque-comment-highlight-text"
-      @click="handleCardClick"
       :title="comment.highlight.text"
+      @click="handleCardClick"
     >
       「{{ comment.highlight.text }}」
     </div>
@@ -84,7 +84,7 @@ function handleCardClick() {
     <!-- 操作按钮 -->
     <div class="yuque-comment-actions">
       <button class="yuque-comment-action-btn" @click="toggleReply">
-        {{ comment.replies.length > 0 ? `回复 (${comment.replies.length})` : '回复' }}
+        {{ comment.replies.length > 0 ? `回复 (${comment.replies.length})` : "回复" }}
       </button>
       <button
         v-if="!comment.resolved"
@@ -93,16 +93,10 @@ function handleCardClick() {
       >
         标记已解决
       </button>
-      <button
-        v-else
-        class="yuque-comment-action-btn resolve"
-        @click="emit('unresolve')"
-      >
+      <button v-else class="yuque-comment-action-btn resolve" @click="emit('unresolve')">
         取消已解决
       </button>
-      <button class="yuque-comment-action-btn delete" @click="emit('delete')">
-        删除
-      </button>
+      <button class="yuque-comment-action-btn delete" @click="emit('delete')">删除</button>
     </div>
 
     <!-- 回复列表 -->
@@ -126,11 +120,7 @@ function handleCardClick() {
         rows="2"
         @keydown="onSubmitReply"
       />
-      <button
-        class="yuque-comment-reply-submit"
-        :disabled="!canSubmitReply"
-        @click="handleReply"
-      >
+      <button class="yuque-comment-reply-submit" :disabled="!canSubmitReply" @click="handleReply">
         发送
       </button>
     </div>

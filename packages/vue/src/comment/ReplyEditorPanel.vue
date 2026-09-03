@@ -14,8 +14,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import ReplyEditor from './ReplyEditor.vue'
+import { ref } from "vue"
+import ReplyEditor from "./ReplyEditor.vue"
 
 interface Props {
   placeholder?: string
@@ -24,34 +24,34 @@ interface Props {
 }
 
 withDefaults(defineProps<Props>(), {
-  placeholder: '请输入回复内容...',
+  placeholder: "请输入回复内容...",
   compact: false,
-  autoFocus: false
+  autoFocus: false,
 })
 
 const emit = defineEmits<{
-  (e: 'submit', content: string): void
-  (e: 'input', content: string): void
-  (e: 'focus'): void
-  (e: 'blur'): void
+  (e: "submit", content: string): void
+  (e: "input", content: string): void
+  (e: "focus"): void
+  (e: "blur"): void
 }>()
 
 const editorRef = ref<InstanceType<typeof ReplyEditor> | null>(null)
 
 function onSubmit(content: string) {
-  emit('submit', content)
+  emit("submit", content)
 }
 
 function onInput(content: string) {
-  emit('input', content)
+  emit("input", content)
 }
 
 function onFocus() {
-  emit('focus')
+  emit("focus")
 }
 
 function onBlur() {
-  emit('blur')
+  emit("blur")
 }
 
 // 暴露方法给父组件
@@ -64,7 +64,7 @@ function clear() {
 }
 
 function getContent() {
-  return editorRef.value?.getContent() || ''
+  return editorRef.value?.getContent() || ""
 }
 
 function setContent(html: string) {
@@ -80,7 +80,7 @@ defineExpose({
   clear,
   getContent,
   setContent,
-  submit
+  submit,
 })
 </script>
 

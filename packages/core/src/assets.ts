@@ -8,7 +8,7 @@ export const LOCAL_ASSET_FILES = {
   codeMirror: "CodeMirror.js",
   kitchenScript: "kitchen.js",
   docUmd: "doc.umd.js",
-  katex: "katex.js"
+  katex: "katex.js",
 } as const
 
 export type LocalAssetKey = keyof typeof LOCAL_ASSET_FILES
@@ -24,12 +24,12 @@ export function localAssets(baseUrl = "/yuque-assets"): YuqueEditorAssets {
     codeMirror: `${base}/${LOCAL_ASSET_FILES.codeMirror}`,
     kitchenScript: `${base}/${LOCAL_ASSET_FILES.kitchenScript}`,
     docUmd: `${base}/${LOCAL_ASSET_FILES.docUmd}`,
-    katex: `${base}/${LOCAL_ASSET_FILES.katex}`
+    katex: `${base}/${LOCAL_ASSET_FILES.katex}`,
   }
 }
 
 export function resolveLocalAssets(
-  resolve: (file: LocalAssetFileName, key: LocalAssetKey) => string
+  resolve: (file: LocalAssetFileName, key: LocalAssetKey) => string,
 ): YuqueEditorAssets {
   return {
     docCss: resolve(LOCAL_ASSET_FILES.docCss, "docCss"),
@@ -39,6 +39,6 @@ export function resolveLocalAssets(
     codeMirror: resolve(LOCAL_ASSET_FILES.codeMirror, "codeMirror"),
     kitchenScript: resolve(LOCAL_ASSET_FILES.kitchenScript, "kitchenScript"),
     docUmd: resolve(LOCAL_ASSET_FILES.docUmd, "docUmd"),
-    katex: resolve(LOCAL_ASSET_FILES.katex, "katex")
+    katex: resolve(LOCAL_ASSET_FILES.katex, "katex"),
   }
 }

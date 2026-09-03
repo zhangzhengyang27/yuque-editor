@@ -25,7 +25,7 @@ export type MiddlewareNext = (err?: unknown) => void
 export type MiddlewareHandler = (
   req: MiddlewareRequest,
   res: MiddlewareResponse,
-  next: MiddlewareNext
+  next: MiddlewareNext,
 ) => void
 
 export interface SimpleVitePlugin {
@@ -44,7 +44,7 @@ const DEFAULT_BASE_URL = "/yuque-assets"
 const LOCAL_FILE_SET: ReadonlySet<string> = new Set(Object.values(LOCAL_ASSET_FILES))
 const MIME_TYPES: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
-  ".js": "application/javascript; charset=utf-8"
+  ".js": "application/javascript; charset=utf-8",
 }
 
 async function pathExists(p: string): Promise<boolean> {
@@ -78,15 +78,17 @@ function uniquePaths(paths: string[]): string[] {
 async function findLocalAssetsDir(searchRoot: string): Promise<string> {
   const envDir = process.env.YUQUE_ASSETS_DIR
   const cwd = process.cwd()
-  const candidates = uniquePaths([
-    envDir ?? "",
-    path.resolve(searchRoot, "assets/yuque-assets"),
-    path.resolve(searchRoot, "node_modules/yuque-editor-core/dist/yuque-assets"),
-    path.resolve(searchRoot, "node_modules/yuque-editor-core/assets/yuque-assets"),
-    path.resolve(cwd, "node_modules/yuque-editor-core/dist/yuque-assets"),
-    path.resolve(cwd, "node_modules/yuque-editor-core/assets/yuque-assets"),
-    path.resolve(cwd, "assets/yuque-assets")
-  ].filter(Boolean))
+  const candidates = uniquePaths(
+    [
+      envDir ?? "",
+      path.resolve(searchRoot, "assets/yuque-assets"),
+      path.resolve(searchRoot, "node_modules/yuque-editor-core/dist/yuque-assets"),
+      path.resolve(searchRoot, "node_modules/yuque-editor-core/assets/yuque-assets"),
+      path.resolve(cwd, "node_modules/yuque-editor-core/dist/yuque-assets"),
+      path.resolve(cwd, "node_modules/yuque-editor-core/assets/yuque-assets"),
+      path.resolve(cwd, "assets/yuque-assets"),
+    ].filter(Boolean),
+  )
 
   for (const dir of candidates) {
     if (await pathExists(dir)) return dir
@@ -94,7 +96,7 @@ async function findLocalAssetsDir(searchRoot: string): Promise<string> {
   throw new Error(
     `Missing local yuque assets dir. Checked ${candidates.length} candidates including: ` +
       `${candidates.slice(0, 3).join(", ")}… ` +
-      `(set YUQUE_ASSETS_DIR to point at the directory containing ${Object.values(LOCAL_ASSET_FILES).join(", ")})`
+      `(set YUQUE_ASSETS_DIR to point at the directory containing ${Object.values(LOCAL_ASSET_FILES).join(", ")})`,
   )
 }
 
@@ -133,7 +135,7 @@ function createAssetMiddleware(assetsDir: string): MiddlewareHandler {
         res.statusCode = 200
         res.setHeader(
           "Content-Type",
-          MIME_TYPES[path.extname(fileName)] ?? "application/octet-stream"
+          MIME_TYPES[path.extname(fileName)] ?? "application/octet-stream",
         )
         res.setHeader("Cache-Control", "no-cache")
         res.end(data)
@@ -152,9 +154,7 @@ function createAssetMiddleware(assetsDir: string): MiddlewareHandler {
  * - build 阶段通过 `emitFile` 把资源打进 `dist/`，与 dev URL 一致；
  * - 不再像旧版那样把资源复制进 `public/yuque-assets`（会污染源码树并导致 ~18MB 重复入库）。
  */
-export function yuqueAssets(
-  options: YuqueAssetsVitePluginOptions = {}
-): SimpleVitePlugin {
+export function yuqueAssets(options: YuqueAssetsVitePluginOptions = {}): SimpleVitePlugin {
   const explicitAssetsDir = options.assetsDir
   let rootDir = process.cwd()
   // 去尾斜杠；空/根路径时回退默认值
@@ -182,17 +182,13 @@ export function yuqueAssets(
     async generateBundle() {
       const assetsDir = await resolveAssetsDir()
       const ctx = this as unknown as {
-        emitFile: (opts: {
-          type: "asset"
-          fileName: string
-          source: string | Uint8Array
-        }) => void
+        emitFile: (opts: { type: "asset"; fileName: string; source: string | Uint8Array }) => void
       }
       for (const file of Object.values(LOCAL_ASSET_FILES)) {
         const source = await fs.readFile(path.resolve(assetsDir, file))
         ctx.emitFile({ type: "asset", fileName: `${outRelPath}/${file}`, source })
       }
-    }
+    },
   }
 }
 

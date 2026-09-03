@@ -52,14 +52,14 @@ export interface CommentSystemOptions {
 
 /** 评论系统事件类型 */
 export type CommentEventType =
-  | 'select'
-  | 'highlight:add'
-  | 'highlight:remove'
-  | 'comment:add'
-  | 'comment:resolve'
-  | 'comment:unresolve'
-  | 'comment:delete'
-  | 'reply:add'
+  | "select"
+  | "highlight:add"
+  | "highlight:remove"
+  | "comment:add"
+  | "comment:resolve"
+  | "comment:unresolve"
+  | "comment:delete"
+  | "reply:add"
 
 /** 评论系统事件 */
 export interface CommentEvent {

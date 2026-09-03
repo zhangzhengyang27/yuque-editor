@@ -10,10 +10,22 @@
     "dev:vue": "pnpm --filter @yuque-editor/vue-example dev",
     "test": "vitest run",
     "test:watch": "vitest",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "clean": "pnpm --filter '*' run clean"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.9.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-vue": "^10.10.0",
+    "globals": "^17.12.0",
     "happy-dom": "^20.13.2",
+    "prettier": "^3.9.6",
+    "typescript-eslint": "^8.69.0",
     "vitest": "^5.0.0"
   }
 }

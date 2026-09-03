@@ -56,7 +56,7 @@ export class ValueSyncer {
     private hooks: ValueSyncerHooks,
     initialValue: string,
     private scheme: YuqueDocScheme,
-    private retryDelays: readonly number[] = DEFAULT_SYNC_RETRY_DELAYS
+    private retryDelays: readonly number[] = DEFAULT_SYNC_RETRY_DELAYS,
   ) {
     this.lastApplied = initialValue
     this.lastEmitted = initialValue

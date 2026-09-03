@@ -1,0 +1,11 @@
+# 依赖与产物
+node_modules
+dist
+*.tsbuildinfo
+pnpm-lock.yaml
+
+# 第三方离线资源（体积大、非我们维护，严禁格式化）
+packages/core/assets
+
+# 教程文档：markdown 排版是刻意的，代码块不参与格式化
+docs
