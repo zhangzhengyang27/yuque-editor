@@ -1,4 +1,5 @@
 import { localAssets } from "./assets"
+import { ensureTocAvoidanceStyle, ensureReadableSelectionStyle } from "./lake-dom"
 
 /**
  * 语雀编辑器支持的文档格式类型
@@ -508,6 +509,12 @@ export async function createYuqueEditor(options: YuqueEditorOptions): Promise<Yu
 
   const toolbarConfig = buildToolbarConfig(options.toolbarItems, options.disabledToolbarItems)
 
+  // 开启大纲时注入正文避让样式（Lake 原生规则依赖 createOpenEditor 场景
+  // 不存在的 .ne-doc-major-editor 祖先类，详见 lake-dom.ts）
+  if (options.showToc) ensureTocAvoidanceStyle()
+  // 修复深色模式下选区文字发白不可读的问题（详见 lake-dom.ts）
+  ensureReadableSelectionStyle()
+
   // 创建编辑器 root 容器，隔离编辑器 DOM 与宿主 container
   const editorRoot = document.createElement("div")
   options.container.appendChild(editorRoot)
@@ -665,7 +672,11 @@ export async function createYuqueEditor(options: YuqueEditorOptions): Promise<Yu
     },
     getContent(type = currentScheme) {
       if (disposed) return ""
-      return safeCall(() => editor.getDocument(type, { includeMeta: true }), "")
+      return safeCall(() => {
+        const value = editor.getDocument(type, { includeMeta: true })
+        // json 方案下 Lake 返回文档模型对象而非字符串，按 API 契约统一序列化
+        return typeof value === "string" ? value : JSON.stringify(value)
+      }, "")
     },
     isEmpty() {
       if (disposed) return true

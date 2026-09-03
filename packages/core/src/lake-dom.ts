@@ -6,6 +6,53 @@
  * 渲染到了 DOM」的检测，供 ValueSyncer 的重试校验使用。
  */
 
+/**
+ * 大纲（TOC）展开时的正文避让样式。
+ *
+ * Lake 的 doc.css 自带等价规则（adapt 模式下给 `.ne-engine > *` 加
+ * `margin-right: 280px`），但其选择器要求祖先存在 `.ne-doc-major-editor`；
+ * 通过 `createOpenEditor` 直接挂载时 Lake 不会添加该类，导致大纲面板
+ * 展开后覆盖正文。这里注入一份不依赖该祖先类的等价规则。
+ *
+ * - 展开态由 Lake 挂在 `.ne-editor` 上的 `.ne-normal-toc` 类标记，
+ *   收起后类被移除，规则自动失配，正文恢复全宽；
+ * - 保留 Lake 原生的 `:not(.ne-ui-sidebar-visible)` 守卫与 280px 数值，
+ *   与语雀产品行为一致；
+ * - 全文档只注入一次（规则对未开启大纲的实例天然失配，多实例安全）。
+ */
+export function ensureTocAvoidanceStyle(doc: Document = document): void {
+  if (doc.querySelector("style[data-yuque-toc-avoidance]")) return
+  const style = doc.createElement("style")
+  style.setAttribute("data-yuque-toc-avoidance", "")
+  style.textContent =
+    ".ne-editor.ne-normal-toc:not(.ne-ui-sidebar-visible) .ne-engine > * { margin-right: 280px; }"
+  doc.head.appendChild(style)
+}
+
+/**
+ * 可读的文字选区样式。
+ *
+ * Lake 的 doc.css 用 `color: inherit !important` 声明选区文字色，但在
+ * Chrome 深色模式下 `inherit` 会解析成系统的 HighlightText（白色），
+ * 叠加 antd.css 全局 `::selection { color: #fff }` 的视觉效果，
+ * 选中文字变成「浅蓝底 + 白字」，几乎不可读。
+ * 这里显式声明深色文字与适度的蓝色高亮，保证可读性。
+ * 全文档只注入一次。
+ */
+export function ensureReadableSelectionStyle(doc: Document = document): void {
+  if (doc.querySelector("style[data-yuque-selection]")) return
+  const style = doc.createElement("style")
+  style.setAttribute("data-yuque-selection", "")
+  style.textContent = [
+    ".ne-engine ::selection,",
+    ".ne-viewer .ne-viewer-body ::selection {",
+    "background: rgba(51, 112, 255, 0.26) !important;",
+    "color: #262626 !important;",
+    "}",
+  ].join(" ")
+  doc.head.appendChild(style)
+}
+
 /** 判断编辑器容器里是否已经渲染出了可见文本 */
 export function hasRenderedContent(container: HTMLElement | null, value: string): boolean {
   if (!container) return false

@@ -289,30 +289,30 @@ sequenceDiagram
 
 ### 关键配置说明
 
-| 配置项                 | 类型                         | 说明                                                                                |
-| ---------------------- | ---------------------------- | ----------------------------------------------------------------------------------- |
-| `value`                | `string`                     | 编辑器内容初始值和受控值                                                            |
-| `scheme`               | `YuqueDocScheme`             | 文档格式，可选：`text/html` / `text/markdown` / `text/plain` / `text/lake` / `json` |
-| `readOnly`             | `boolean`                    | 只读模式，底层走 `createOpenViewer`                                                 |
-| `assets`               | `Partial<YuqueEditorAssets>` | 覆盖默认离线资源地址                                                                |
-| `onChange`             | `(value: string) => void`    | 内容变更回调                                                                        |
-| `onLoad`               | `() => void`                 | 编辑器初始化完成回调                                                                |
-| `onError`              | `(error: Error) => void`     | 错误回调                                                                            |
-| `onFocus`              | `() => void`                 | 编辑器获得焦点时触发                                                                |
-| `onBlur`               | `() => void`                 | 编辑器失去焦点时触发                                                                |
-| `onSelectionChange`    | `() => void`                 | 选区变化时触发                                                                      |
-| `onFocusStatusChange`  | `(focused: boolean) => void` | 焦点状态变化时触发                                                                  |
-| `onBeforeDestroy`      | `() => void`                 | 编辑器销毁前触发                                                                    |
-| `uploadImage`          | `EditorUploadHandler`        | 图片上传钩子，入参 `{ type, data }`                                                 |
-| `uploadVideo`          | `EditorUploadHandler`        | 视频上传钩子，入参 `{ type, data }`                                                 |
-| `showToolbar`          | `boolean`                    | 控制工具栏显示，默认 `true`                                                         |
-| `showToc`              | `boolean`                    | 控制目录显示                                                                        |
-| `paragraphSpacing`     | `boolean`                    | 段落间距（经典排版）                                                                |
-| `defaultFontSize`      | `number`                     | 默认字号，默认 `15`                                                                 |
-| `darkMode`             | `boolean`                    | 暗黑模式                                                                            |
-| `disabledToolbarItems` | `string[]`                   | 从默认工具栏列表剔除指定的按钮（与 `toolbarItems` 互斥）                            |
-| `toolbarItems`         | `string[]`                   | 完全自定义工具栏按钮列表（白名单，优先级高于 `disabledToolbarItems`）               |
-| `instanceKey`          | `string \| number`           | 强制重建编辑器的逃生舱：函数型配置变化不会触发重建，改变此值即可                    |
+| 配置项                 | 类型                         | 说明                                                                                                                 |
+| ---------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `value`                | `string`                     | 编辑器内容初始值和受控值                                                                                             |
+| `scheme`               | `YuqueDocScheme`             | 文档格式，可选：`text/html` / `text/markdown` / `text/plain` / `text/lake` / `json`                                  |
+| `readOnly`             | `boolean`                    | 只读模式，底层走 `createOpenViewer`                                                                                  |
+| `assets`               | `Partial<YuqueEditorAssets>` | 覆盖默认离线资源地址                                                                                                 |
+| `onChange`             | `(value: string) => void`    | 内容变更回调                                                                                                         |
+| `onLoad`               | `() => void`                 | 编辑器初始化完成回调                                                                                                 |
+| `onError`              | `(error: Error) => void`     | 错误回调                                                                                                             |
+| `onFocus`              | `() => void`                 | 编辑器获得焦点时触发                                                                                                 |
+| `onBlur`               | `() => void`                 | 编辑器失去焦点时触发                                                                                                 |
+| `onSelectionChange`    | `() => void`                 | 选区变化时触发                                                                                                       |
+| `onFocusStatusChange`  | `(focused: boolean) => void` | 焦点状态变化时触发                                                                                                   |
+| `onBeforeDestroy`      | `() => void`                 | 编辑器销毁前触发                                                                                                     |
+| `uploadImage`          | `EditorUploadHandler`        | 图片上传钩子，入参 `{ type, data }`                                                                                  |
+| `uploadVideo`          | `EditorUploadHandler`        | 视频上传钩子，入参 `{ type, data }`                                                                                  |
+| `showToolbar`          | `boolean`                    | 控制工具栏显示，默认 `true`                                                                                          |
+| `showToc`              | `boolean`                    | 控制目录（大纲）显示；开启后自动注入样式，大纲展开时为正文让出右侧空间（`lake-dom.ts` 的 `ensureTocAvoidanceStyle`） |
+| `paragraphSpacing`     | `boolean`                    | 段落间距（经典排版）                                                                                                 |
+| `defaultFontSize`      | `number`                     | 默认字号，默认 `15`                                                                                                  |
+| `darkMode`             | `boolean`                    | 暗黑模式                                                                                                             |
+| `disabledToolbarItems` | `string[]`                   | 从默认工具栏列表剔除指定的按钮（与 `toolbarItems` 互斥）                                                             |
+| `toolbarItems`         | `string[]`                   | 完全自定义工具栏按钮列表（白名单，优先级高于 `disabledToolbarItems`）                                                |
+| `instanceKey`          | `string \| number`           | 强制重建编辑器的逃生舱：函数型配置变化不会触发重建，改变此值即可                                                     |
 
 ### 常见坑位与排查
 
@@ -354,6 +354,8 @@ npm pack --dry-run
 **DOM 隔离** — 编辑器创建独立的 `editorRoot` 容器挂载到宿主 `container` 内，`destroy()` 时只移除 `editorRoot`，不会清空宿主容器的其他子节点。
 
 **错误兜底** — `safeCall` 统一捕获编辑器内部回调中的异常（如销毁时的 TypeError），避免冒泡到宿主应用。可通过 `YUQUE_EDITOR_DEBUG=1` 查看被兜底的错误详情。
+
+**Lake 缺失场景的样式补丁** — `lake-dom.ts` 会按需向文档注入少量修正样式（全文档去重）：开启大纲时为正文让出右侧空间（Lake 原生规则依赖直接挂载场景不存在的祖先类），以及修复深色模式下选区文字发白不可读的问题。
 
 ## License
 
