@@ -59,6 +59,63 @@ export interface YuqueEditorOptions {
   toolbarItems?: string[]
 }
 
+/**
+ * Lake 1.67.0（doc.umd.js）的默认工具栏项快照。
+ *
+ * `disabledToolbarItems` 需要从默认列表中剔除禁用项，但 Lake 没有公开「默认 items」数组
+ * （`window.Doc.toolbarItems` 只是 item key 的字典，且含表格/代码块专属项）。
+ * 因此这里内置一份快照作为过滤基准。
+ *
+ * ⚠️ 升级 doc.umd.js 后需同步核对；即使快照过时，也只会影响剔除项的完整度，不会破坏工具栏。
+ */
+export const DEFAULT_TOOLBAR_ITEMS: readonly string[] = [
+  "cardSelect", "|",
+  "undo", "redo", "formatPainter", "clearFormat", "|",
+  "style", "fontsize", "bold", "italic", "strikethrough", "underline", "mixedTextStyle", "|",
+  "color", "bgColor", "|",
+  "alignment", "unorderedList", "orderedList", "indent", "lineHeight", "|",
+  "taskList", "link", "quote", "hr", "search", "correction"
+]
+
+const TOOLBAR_SEPARATOR = "|"
+
+/** 去掉因剔除而产生的连续/首尾分隔符 */
+function normalizeToolbarItems(items: string[]): string[] {
+  const result: string[] = []
+  for (const item of items) {
+    if (item === TOOLBAR_SEPARATOR) {
+      if (result.length === 0 || result[result.length - 1] === TOOLBAR_SEPARATOR) continue
+    }
+    result.push(item)
+  }
+  while (result.length > 0 && result[result.length - 1] === TOOLBAR_SEPARATOR) {
+    result.pop()
+  }
+  return result
+}
+
+/**
+ * 构建工具栏配置。
+ *
+ * 优先级：`toolbarItems`（白名单）> `disabledToolbarItems`（从默认列表剔除）> 不传（用 Lake 默认）。
+ * 注意两者语义相反，同时传入时以 `toolbarItems` 为准。
+ */
+export function buildToolbarConfig(
+  toolbarItems?: string[],
+  disabledToolbarItems?: string[]
+): ThirdPartyEditorOptions["toolbar"] | undefined {
+  if (toolbarItems != null) {
+    return { agentConfig: { default: { items: [...toolbarItems] } } }
+  }
+  if (disabledToolbarItems == null) return undefined
+
+  const disabled = new Set(disabledToolbarItems)
+  const items = normalizeToolbarItems(
+    DEFAULT_TOOLBAR_ITEMS.filter((item) => !disabled.has(item))
+  )
+  return { agentConfig: { default: { items } } }
+}
+
 export interface YuqueEditorRef {
   appendContent: (html: string, breakLine?: boolean) => void
   setContent: (content: string, type?: YuqueDocScheme) => void
@@ -234,13 +291,25 @@ function safeCall<T>(fn: () => T, fallback: T): T {
   }
 }
 
+/**
+ * 按 data 属性查找已托管的资源节点。
+ * 用遍历比对而非属性选择器拼接，避免 URL 中的引号/方括号破坏选择器语法。
+ */
+function findManagedElement<T extends Element>(selector: string, url: string): T | null {
+  for (const el of Array.from(document.querySelectorAll<T>(selector))) {
+    if ((el as unknown as HTMLElement).dataset.yuqueAsset === url) return el
+  }
+  return null
+}
+
 function loadStyleOnce(url: string): Promise<void> {
   if (assetLoaders.has(url)) return assetLoaders.get(url)!
 
   const p = new Promise<void>((resolve, reject) => {
-    const existing = document.querySelector(
-      `link[data-yuque-asset="${url}"]`
-    ) as ManagedLinkElement | null
+    const existing = findManagedElement<ManagedLinkElement>(
+      "link[data-yuque-asset]",
+      url
+    )
     if (existing) {
       if (existing._yuqueFailed) {
         existing.remove()
@@ -274,11 +343,12 @@ function loadScriptOnce(url: string): Promise<void> {
   if (assetLoaders.has(url)) return assetLoaders.get(url)!
 
   const p = new Promise<void>((resolve, reject) => {
-    const existing = document.querySelector(
-      `script[data-yuque-asset="${url}"]`
-    ) as ManagedScriptElement | null
+    const existing = findManagedElement<ManagedScriptElement>(
+      "script[data-yuque-asset]",
+      url
+    )
     if (existing) {
-      const readyState = (existing as any).readyState
+      const readyState = (existing as unknown as { readyState?: string }).readyState
       if (existing._yuqueFailed) {
         existing.remove()
       } else if (
@@ -345,11 +415,33 @@ async function ensureAssets(assets: YuqueEditorAssets) {
   await loadScriptOnce(assets.docUmd)
 }
 
+/** 块级边界标签：取 textContent 时需要在它们之间补空格，否则相邻块的单词会被粘连 */
+const BLOCK_BOUNDARY_SELECTOR =
+  "p,div,li,h1,h2,h3,h4,h5,h6,blockquote,tr,td,th,pre,section,article,figcaption,hr"
+
+/**
+ * 提取 HTML 的纯文本。
+ *
+ * 必须使用 `DOMParser` 而非 `innerHTML`：`innerHTML` 即便挂在游离节点上，
+ * 也会触发 `<img onerror>` / `<script>` 等副作用（已实测可注入），
+ * 而 `DOMParser` 解析出的文档是惰性的，不会加载资源、不会执行脚本。
+ *
+ * ⚠️ 依赖 DOM API，仅限浏览器环境调用。
+ */
 function stripHtml(html: string): string {
-  // ⚠️ 依赖 DOM API（document.createElement），仅限浏览器环境调用
-  const tmp = document.createElement("div")
-  tmp.innerHTML = html
-  return (tmp.textContent ?? "").trim()
+  const parsed = new DOMParser().parseFromString(html, "text/html")
+  const body = parsed.body
+  if (!body) return ""
+
+  for (const el of Array.from(body.querySelectorAll(BLOCK_BOUNDARY_SELECTOR))) {
+    el.insertAdjacentText("beforebegin", " ")
+    el.insertAdjacentText("afterend", " ")
+  }
+  for (const br of Array.from(body.querySelectorAll("br"))) {
+    br.insertAdjacentText("beforebegin", " ")
+  }
+
+  return (body.textContent ?? "").replace(/\s+/g, " ").trim()
 }
 
 function stripMarkdown(md: string): string {
@@ -366,6 +458,16 @@ function stripMarkdown(md: string): string {
     .replace(/\s+/g, " ")
     .trim()
 }
+
+/**
+ * 逐字计数的字符集：CJK 统一表意文字 + 扩展 A + 兼容表意文字 + 日文假名 + 韩文音节。
+ *
+ * 模块级常量可安全复用：`String.prototype.match` 在带 `g` 标志时会自行重置 `lastIndex`。
+ */
+const CJK_CHAR_PATTERN =
+  /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af]/g
+/** 按词计数：拉丁字母与数字，允许词内撇号/连字符 */
+const LATIN_WORD_PATTERN = /[A-Za-z0-9]+(?:['’\-][A-Za-z0-9]+)*/g
 
 function stripByScheme(content: string, scheme: YuqueDocScheme): string {
   if (scheme === "text/markdown") return stripMarkdown(content)
@@ -401,13 +503,7 @@ export async function createYuqueEditor(
   if (options.showToolbar === false) disabledPlugins.push("toolbar")
   if (options.readOnly) disabledPlugins.push("save")
 
-  // toolbar 配置优先级：toolbarItems > disabledToolbarItems > 默认
-  let toolbarConfig: ThirdPartyEditorOptions["toolbar"] | undefined
-  if (options.toolbarItems != null) {
-    toolbarConfig = { agentConfig: { default: { items: options.toolbarItems } } }
-  } else if (options.disabledToolbarItems != null) {
-    toolbarConfig = { agentConfig: { default: { items: options.disabledToolbarItems } } }
-  }
+  const toolbarConfig = buildToolbarConfig(options.toolbarItems, options.disabledToolbarItems)
 
   // 创建编辑器 root 容器，隔离编辑器 DOM 与宿主 container
   const editorRoot = document.createElement("div")
@@ -593,9 +689,11 @@ export async function createYuqueEditor(
     wordCount() {
       if (disposed) return 0
       const text = api.getSummaryContent()
-      const chinese = text.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g)?.length ?? 0
-      const english = text.match(/[a-zA-Z]+/g)?.length ?? 0
-      return chinese + english
+      // CJK 逐字计数：中文 / 日文假名 / 韩文 / 中日韩扩展 A / 兼容表意文字
+      const cjk = text.match(CJK_CHAR_PATTERN)?.length ?? 0
+      // 拉丁字母与数字按词计数，允许词内连字符与撇号（can't / state-of-art）
+      const words = text.match(LATIN_WORD_PATTERN)?.length ?? 0
+      return cjk + words
     },
     focusToStart(offset = 0) {
       if (disposed) return
@@ -617,8 +715,16 @@ export async function createYuqueEditor(
     },
     destroy() {
       if (disposed) return
-      options.onBeforeDestroy?.()
+      // 先置位，保证 onBeforeDestroy 抛异常时不会重复执行销毁流程
       disposed = true
+      if (options.onBeforeDestroy) {
+        try {
+          options.onBeforeDestroy()
+        } catch (e) {
+          // 宿主回调异常不应阻断销毁，否则 disposers / editor.destroy / editorRoot.remove 全部不会执行
+          if (DEBUG) console.warn("[yuque-editor-core] onBeforeDestroy callback error:", e)
+        }
+      }
       for (const d of disposers) d()
       if (typeof editor?.destroy === "function") {
         safeCall(() => {

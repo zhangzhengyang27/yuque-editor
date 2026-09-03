@@ -2,6 +2,7 @@ import { defineComponent, h, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import type { PropType } from "vue"
 import { createYuqueEditor, normalizeError, shallowEqual } from "./editor"
 import type { YuqueEditorOptions, YuqueEditorRef, YuqueDocScheme } from "./editor"
+import { ValueSyncer, INIT_SYNC_RETRY_DELAYS } from "./controlled"
 
 export const YuqueRichText = defineComponent({
   name: "YuqueRichText",
@@ -60,15 +61,24 @@ export const YuqueRichText = defineComponent({
     toolbarItems: {
       type: Array as PropType<string[]>,
       required: false
+    },
+    /**
+     * 强制重建编辑器的逃生舱：函数型配置（uploadImage 等）引用变化不会触发重建，
+     * 需要主动重建时改变此值即可。
+     */
+    instanceKey: {
+      type: [String, Number] as PropType<string | number>,
+      required: false
     }
   },
   emits: ["change", "load", "error", "focus", "blur", "selectionchange", "focusstatuschange", "beforedestroy"],
   setup(props, { emit, expose }) {
     const container = ref<HTMLElement | null>(null)
     let api: YuqueEditorRef | null = null
+    /** 受控值同步器，与当前编辑器实例一一对应 */
+    let syncer: ValueSyncer | null = null
     let destroyed = false
     let initSeq = 0
-    let lastApplied = { value: props.value, scheme: props.scheme }
 
     // 缓存上一轮配置，用于浅比较判断是否真正变化
     let lastConfig = {
@@ -83,7 +93,8 @@ export const YuqueRichText = defineComponent({
       defaultFontSize: props.defaultFontSize,
       darkMode: props.darkMode,
       disabledToolbarItems: props.disabledToolbarItems,
-      toolbarItems: props.toolbarItems
+      toolbarItems: props.toolbarItems,
+      instanceKey: props.instanceKey
     }
 
     const configKeys = Object.keys(lastConfig) as (keyof typeof lastConfig)[]
@@ -91,17 +102,21 @@ export const YuqueRichText = defineComponent({
     const init = async () => {
       if (!container.value) return
       const seq = ++initSeq
-      const nextValue = props.value
-      const nextScheme = props.scheme
 
       api?.destroy()
       api = null
+      syncer?.dispose()
+      syncer = null
 
       try {
+        // onChange 可能在 createYuqueEditor 内部（初始灌值阶段）就同步触发，
+        // 此时同步器尚未创建，先由局部变量承接，创建后再做回声过滤
+        let localSyncer: ValueSyncer | null = null
+
         const nextApi = await createYuqueEditor({
           container: container.value,
-          value: nextValue,
-          scheme: nextScheme,
+          value: props.value,
+          scheme: props.scheme,
           readOnly: props.readOnly,
           assets: props.assets,
           uploadImage: props.uploadImage,
@@ -115,7 +130,11 @@ export const YuqueRichText = defineComponent({
           toolbarItems: props.toolbarItems,
           onLoad: () => emit("load"),
           onError: (error) => emit("error", error),
-          onChange: (v) => emit("change", v),
+          onChange: (v) => {
+            if (destroyed || seq !== initSeq) return
+            if (localSyncer && !localSyncer.shouldEmit(v)) return
+            emit("change", v)
+          },
           onFocus: () => emit("focus"),
           onBlur: () => emit("blur"),
           onSelectionChange: () => emit("selectionchange"),
@@ -129,7 +148,22 @@ export const YuqueRichText = defineComponent({
         }
 
         api = nextApi
-        lastApplied = { value: nextValue, scheme: nextScheme }
+        // 初始化值以最新 props.value 为准（修复初始化完成前 value 变化被丢弃的问题）
+        localSyncer = new ValueSyncer(
+          {
+            getContent: (scheme) => nextApi.getContent(scheme),
+            setContent: (content, scheme) => nextApi.setContent(content, scheme)
+          },
+          props.value,
+          props.scheme,
+          INIT_SYNC_RETRY_DELAYS
+        )
+        syncer = localSyncer
+
+        // 初始化后强制校验一次，补齐初始化期间可能发生的值变化
+        if (!localSyncer.sync(props.value, true)) {
+          localSyncer.syncWithRetry(props.value)
+        }
       } catch (error) {
         if (destroyed || seq !== initSeq) return
         emit("error", normalizeError(error))
@@ -143,6 +177,8 @@ export const YuqueRichText = defineComponent({
     onBeforeUnmount(() => {
       destroyed = true
       initSeq++
+      syncer?.dispose()
+      syncer = null
       api?.destroy()
       api = null
     })
@@ -160,7 +196,8 @@ export const YuqueRichText = defineComponent({
         props.defaultFontSize,
         props.darkMode,
         props.disabledToolbarItems,
-        props.toolbarItems
+        props.toolbarItems,
+        props.instanceKey
       ] as const,
       async () => {
         if (!container.value) return
@@ -177,7 +214,8 @@ export const YuqueRichText = defineComponent({
           defaultFontSize: props.defaultFontSize,
           darkMode: props.darkMode,
           disabledToolbarItems: props.disabledToolbarItems,
-          toolbarItems: props.toolbarItems
+          toolbarItems: props.toolbarItems,
+          instanceKey: props.instanceKey
         }
         const changed = configKeys.some(
           (k) => !shallowEqual(lastConfig[k], nextConfig[k])
@@ -190,15 +228,13 @@ export const YuqueRichText = defineComponent({
       { flush: "post" }
     )
 
+    // 外部 value 变化 → 同步到编辑器（回声由 ValueSyncer 过滤）
     watch(
       () => props.value,
       (nextValue) => {
-        if (!api) return
-        const current = api.getContent(props.scheme)
-        if (current !== nextValue) {
-          api.setContent(nextValue, props.scheme)
-        }
-        lastApplied = { value: nextValue, scheme: props.scheme }
+        if (!syncer) return
+        syncer.setScheme(props.scheme)
+        syncer.syncWithRetry(nextValue)
       },
       { flush: "post" }
     )
@@ -229,6 +265,8 @@ export const YuqueRichText = defineComponent({
         api?.insertBreakLine()
       },
       destroy() {
+        syncer?.dispose()
+        syncer = null
         api?.destroy()
         api = null
       },

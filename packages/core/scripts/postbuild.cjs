@@ -65,7 +65,7 @@ function createRewriteTasks(entryDeps) {
 const root = process.cwd()
 const dist = path.resolve(root, "dist")
 
-const entries = ["index", "assets", "vite-assets", "editor", "react", "vue"]
+const entries = ["index", "assets", "vite-assets", "editor", "controlled", "react", "vue"]
 for (const name of entries) {
   const requiredPairs = [
     [
@@ -87,9 +87,10 @@ for (const name of entries) {
 }
 
 const rewriteTasks = createRewriteTasks({
-  index: ["assets", "editor"],
+  index: ["assets", "editor", "controlled"],
   "vite-assets": ["assets"],
   editor: ["assets"],
+  controlled: [],
   react: ["editor"],
   vue: ["editor"]
 })

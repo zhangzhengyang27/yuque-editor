@@ -143,7 +143,7 @@ YUQUE_EDITOR_DEBUG=1 pnpm dev
 
 ### Vite 插件
 
-在开发和构建时自动把离线资源拷贝到项目 `public/yuque-assets`：
+按需向应用提供编辑器离线资源——**dev 通过静态中间件实时提供，build 通过 `emitFile` 打进产物目录**，不写入源码 `public/`：
 
 ```ts
 import { yuqueAssets } from "yuque-editor-core/vite-assets"
@@ -153,13 +153,16 @@ export default {
 }
 ```
 
+- dev：访问 `/yuque-assets/*`（默认前缀）即命中资源目录，实时生效
+- build：资源输出到 `dist/yuque-assets/*`，与 dev URL 一致，宿主无需区分环境
+
 高级配置：
 
 ```ts
 yuqueAssets({
-  // 自定义输出目录，默认 "public/yuque-assets"
-  publicSubDir: "static/editor-assets",
-  // 显式指定本地资源目录，跳过自动搜索
+  // 自定义 URL 前缀与产物子目录，默认 "/yuque-assets"
+  baseUrl: "/static/editor-assets",
+  // 显式指定本地资源目录，跳过自动搜索（也可用环境变量 YUQUE_ASSETS_DIR）
   assetsDir: "./local-assets/yuque-assets"
 })
 ```
@@ -260,8 +263,9 @@ resetAssetLoaders()
 | `src/editor.ts` | 核心能力：资源加载、编辑器初始化、实例 API 封装 |
 | `src/react.tsx` | React 18 组件封装（`forwardRef` 暴露底层实例） |
 | `src/vue.ts` | Vue 3 组件封装（`expose` 暴露底层实例） |
+| `src/controlled.ts` | 受控值同步器 `ValueSyncer`（React/Vue 共用，回声过滤 + 重试同步） |
 | `src/assets.ts` | 离线资源文件名定义与 URL 解析工具 |
-| `src/vite-assets.ts` | Vite 插件，开发和构建时自动复制静态资源 |
+| `src/vite-assets.ts` | Vite 插件：dev 静态中间件 + build `emitFile` 按需提供资源 |
 | `assets/yuque-assets/*` | 内置离线资源源文件 |
 | `scripts/postbuild.cjs` | 构建后整理 `dist` 目录结构并复制离线资源 |
 
@@ -312,18 +316,19 @@ sequenceDiagram
 | `paragraphSpacing` | `boolean` | 段落间距（经典排版） |
 | `defaultFontSize` | `number` | 默认字号，默认 `15` |
 | `darkMode` | `boolean` | 暗黑模式 |
-| `disabledToolbarItems` | `string[]` | 禁用指定的工具栏按钮 |
-| `toolbarItems` | `string[]` | 完全自定义工具栏按钮列表 |
+| `disabledToolbarItems` | `string[]` | 从默认工具栏列表剔除指定的按钮（与 `toolbarItems` 互斥） |
+| `toolbarItems` | `string[]` | 完全自定义工具栏按钮列表（白名单，优先级高于 `disabledToolbarItems`） |
+| `instanceKey` | `string \| number` | 强制重建编辑器的逃生舱：函数型配置变化不会触发重建，改变此值即可 |
 
 ### 常见坑位与排查
 
-- **静态资源 404**：确认站点可访问 `/yuque-assets/*`，并包含 `doc.umd.js`、`kitchen.js` 等核心脚本。
+- **静态资源 404**：确认站点可访问 `/yuque-assets/*`（未用 `vite-assets` 插件时需自行托管），并包含 `doc.umd.js`、`kitchen.js` 等核心脚本。
 - **`window.Doc` 未定义**：通常是 `doc.umd.js` 未加载成功，或资源加载顺序被外部脚本打断。
-- **受控模式循环更新**：组件内部通过 `lastSetContent` 字符串比对自动抑制多余的 `onChange` 派发，正常使用即可。如仍有问题，检查 `onChange` 回调中是否直接回写了相同值。
+- **受控模式循环更新**：核心的 `lastSetContent` 比对 + 封装层的 `ValueSyncer`（`src/controlled.ts`）会抑制回声，正常使用即可。如仍有问题，检查 `onChange` 回调中是否直接回写了相同值。
 - **切换 `scheme` 后内容异常**：切换格式会重建编辑器实例，确保上层同时更新了对应格式的 `value`。
 - **上传失败**：检查 `uploadImage` / `uploadVideo` 返回值是否包含 `url` 和 `size` 字段。
 - **多实例样式冲突**：资源加载器内置去重机制，同名资源只加载一次。
-- **实例重建抖动**：React/Vue 组件使用 `shallowEqual` 浅比较配置项，只有真正变化时才重建实例。如果函数引用频繁变化，考虑用 `useCallback` / `computed` 稳定化。
+- **实例重建抖动**：React/Vue 组件使用 `shallowEqual` 浅比较配置项，只有真正变化时才重建实例。如果函数引用频繁变化，考虑用 `useCallback` / `computed` 稳定化；函数实现真正变了（如切换上传后端）需重建时，改变 `instanceKey` 即可。
 
 ### 本地开发与发布
 

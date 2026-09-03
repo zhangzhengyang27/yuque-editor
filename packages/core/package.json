@@ -42,6 +42,11 @@
       "import": "./dist/editor.mjs",
       "require": "./dist/editor.cjs"
     },
+    "./controlled": {
+      "types": "./dist/controlled.d.ts",
+      "import": "./dist/controlled.mjs",
+      "require": "./dist/controlled.cjs"
+    },
     "./react": {
       "types": "./dist/react.d.ts",
       "import": "./dist/react.mjs",
