@@ -73,6 +73,13 @@ const BLOCK_BOUNDARY_TAGS = new Set([
   "DIV",
 ])
 
+/**
+ * Lake 引擎的块是 NE-* 自定义元素（ne-p / ne-h1 / ne-ul …）；
+ * 同时保留常规块标签，兼容直接挂载原生内容的场景。
+ */
+const isBlockElement = (el: Element): boolean =>
+  el.tagName.startsWith("NE-") || BLOCK_BOUNDARY_TAGS.has(el.tagName)
+
 export function createBlockHandleController(options: BlockHandleOptions): BlockHandleController {
   const { container, editor } = options
   const actions = options.actions ?? DEFAULT_BLOCK_ACTIONS
@@ -148,14 +155,17 @@ export function createBlockHandleController(options: BlockHandleOptions): BlockH
         row.addEventListener("mouseleave", () => {
           row.style.background = "transparent"
         })
+        // mousedown 仅阻止默认行为（保住块选区不被清空），命令在 click 里执行：
+        // 若在 mousedown 里隐藏菜单，会破坏浏览器 click 事件的派发条件
         row.addEventListener("mousedown", (event) => {
-          // 阻止 mousedown 清空选区：块内容仍处于选中态，命令才能命中
           event.preventDefault()
+          event.stopPropagation()
+        })
+        row.addEventListener("click", (event) => {
           event.stopPropagation()
           if (item.action) {
             item.action(editor)
           } else if (item.command) {
-            // execCommand 走 YuqueEditorRef 未封装的命令时，用菜单自己的安全通道
             runCommand(item.command, item.args)
           }
           hideMenu()
@@ -219,7 +229,7 @@ export function createBlockHandleController(options: BlockHandleOptions): BlockH
         return
       }
     }
-    if (!block || !BLOCK_BOUNDARY_TAGS.has(block.tagName)) {
+    if (!block || !isBlockElement(block)) {
       hideHandle()
       return
     }
