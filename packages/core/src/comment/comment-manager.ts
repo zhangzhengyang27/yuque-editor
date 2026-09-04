@@ -36,6 +36,8 @@ export class CommentManager {
   // --- 选区浮动按钮 ---
   private floatingBtn: HTMLDivElement | null = null
   private _selectionListenerActive = false
+  /** 宿主自建评论入口时为 false：不渲染内置浮动按钮，改用 captureSelection() */
+  private floatingButtonEnabled: boolean
 
   // --- 回调 ---
   private eventListeners = new Map<CommentEventType, Set<EventCallback>>()
@@ -50,6 +52,7 @@ export class CommentManager {
     this.container = options.container
     this.currentUser = options.currentUser
     this.onChangeCallback = options.onChange
+    this.floatingButtonEnabled = options.showFloatingButton ?? true
 
     // 查找可滚动父容器（兜底为视口滚动 window）
     const scrollContainer = this.findScrollContainer(options.container)
@@ -59,8 +62,10 @@ export class CommentManager {
       scrollContainer,
     })
 
-    // 初始化选区监听（划词后显示浮动按钮）
-    this.setupSelectionListener()
+    // 初始化选区监听（划词后显示浮动按钮）；宿主自建入口时不启用
+    if (this.floatingButtonEnabled) {
+      this.setupSelectionListener()
+    }
   }
 
   // ==================== 公开 API ====================
@@ -177,6 +182,43 @@ export class CommentManager {
   /** 设置悬浮高亮 */
   setHoveredComment(commentId: string | null) {
     this.highlightEngine.setHovered(commentId)
+  }
+
+  /**
+   * 从宿主数据源（如服务端）整体灌入评论列表并重建高亮。
+   * 以传入数组为准：先移除已消失条目的高亮，再整体替换并重注册。
+   */
+  hydrate(comments: Comment[]) {
+    const previousIds = new Set(this.comments.map((c) => c.id))
+    for (const id of previousIds) {
+      if (!comments.some((c) => c.id === id)) {
+        this.highlightEngine.removeHighlight(id)
+      }
+    }
+    this.comments = [...comments]
+    for (const comment of this.comments) {
+      if (comment.highlight) {
+        this.highlightEngine.addHighlight(comment.id, comment.highlight, comment.resolved)
+      }
+    }
+    this.emitChange()
+  }
+
+  /**
+   * 把当前选区序列化为锚点并清除选区（宿主自定义评论入口时调用）。
+   * 选区不在容器内或为空时返回 null。
+   */
+  captureSelection(): HighlightSelection | null {
+    const selection = window.getSelection()
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null
+
+    const range = selection.getRangeAt(0)
+    if (!this.container.contains(range.commonAncestorContainer)) return null
+
+    const highlight = selectionToHighlight(this.container, selection)
+    selection.removeAllRanges()
+    this.hideFloatingButton()
+    return highlight
   }
 
   /** 获取高亮引擎（用于自定义渲染） */

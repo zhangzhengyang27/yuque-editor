@@ -48,6 +48,11 @@ export interface CommentSystemOptions {
   currentUser: CommentUser
   /** 评论变更回调 */
   onChange?: (comments: Comment[]) => void
+  /**
+   * 是否渲染内置的划词浮动按钮（默认 true）。
+   * 宿主自建评论入口（如自定义选中浮动条）时可关掉，改用 captureSelection()。
+   */
+  showFloatingButton?: boolean
 }
 
 /** 评论系统事件类型 */
