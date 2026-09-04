@@ -96,6 +96,8 @@ export const YuqueRichText = forwardRef<YuqueEditorRef, YuqueRichTextProps>(func
       clearFormat: () => checkReady().clearFormat(),
       selectAll: () => checkReady().selectAll(),
       getWordCount: () => checkReady().getWordCount(),
+      execCommand: (command: string, ...args: unknown[]) =>
+        checkReady().execCommand(command, ...args),
     } satisfies YuqueEditorRef
     // 内部只通过 editorRef.current 延迟取值，不含任何需要更新的闭包变量
   }, [])

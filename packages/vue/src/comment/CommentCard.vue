@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick } from "vue"
-import type { Comment } from "./types"
-import { formatRelativeTime, getUserInitial } from "./utils"
+import type { Comment } from "yuque-editor-core"
+import { formatRelativeTime, getUserInitial } from "yuque-editor-core"
 
 defineProps<{
   comment: Comment

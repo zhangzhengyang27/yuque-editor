@@ -240,7 +240,7 @@ export class HighlightEngine {
       const rects: DOMRect[] = []
       const containerRect = this.container.getBoundingClientRect()
 
-      for (const rect of range.getClientRects()) {
+      for (const rect of Array.from(range.getClientRects())) {
         if (rect.width === 0 && rect.height === 0) continue
         // 转换为相对于容器的坐标
         rects.push(

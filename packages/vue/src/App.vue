@@ -2,14 +2,15 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue"
 import { YuqueRichText } from "yuque-editor-core/vue"
 import type { YuqueDocScheme, YuqueEditorRef, UploadResult } from "yuque-editor-core/editor"
-import { CommentManager } from "./comment/comment-manager"
-import type { Comment, CommentEvent, HighlightSelection } from "./comment/types"
-import { DEFAULT_USER } from "./comment/utils"
+import { CommentManager, ensureCommentStyles } from "yuque-editor-core"
+import type { Comment, CommentEvent, HighlightSelection } from "yuque-editor-core"
+import { DEFAULT_USER } from "yuque-editor-core"
 import CommentPopover from "./comment/CommentPopover.vue"
 import CommentPanel from "./comment/CommentPanel.vue"
 import ReplyEditorPanel from "./comment/ReplyEditorPanel.vue"
-import "./comment/styles.css"
 import "./demo.css"
+
+ensureCommentStyles()
 
 const INITIAL_VALUE = `<h1>Hello Yuque Editor!</h1>
 <p>这是一个 <strong>Vue 示例</strong>，使用 yuque-editor-core 加载语雀编辑器。</p>

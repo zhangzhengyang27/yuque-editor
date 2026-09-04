@@ -169,6 +169,14 @@ export interface YuqueEditorRef {
   clearFormat: () => void
   selectAll: () => void
   getWordCount: () => number
+  /**
+   * 通用命令透传：直接调用 Lake 三方编辑器的 execCommand。
+   *
+   * 供宿主执行 core 尚未封装的命令（如 quote/hr/delete 等选区命令），
+   * 命令作用于当前选区；内部状态由 Lake 自行维护。不存在或执行失败的
+   * 命令会被安全吞掉（与其它命令封装同一兜底策略）。
+   */
+  execCommand: (command: string, ...args: unknown[]) => void
 }
 
 interface ThirdPartyUploadRequest {
@@ -793,6 +801,9 @@ export async function createYuqueEditor(options: YuqueEditorOptions): Promise<Yu
     },
     getWordCount() {
       return api.wordCount()
+    },
+    execCommand(command: string, ...args: unknown[]) {
+      exec(command, ...args)
     },
   }
 

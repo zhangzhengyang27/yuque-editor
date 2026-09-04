@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest"
-import { getNodeByPath, getNodePath } from "../../vue/src/comment/highlight-engine"
+import { getNodeByPath, getNodePath } from "../src/comment/highlight-engine"
 
 /**
  * 说明：highlight-engine.ts 目前位于 Vue 示例包中，这里直接跨包引用源码测试

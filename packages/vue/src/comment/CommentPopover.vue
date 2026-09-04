@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, computed, nextTick } from "vue"
-import type { HighlightSelection } from "./types"
+import type { HighlightSelection } from "yuque-editor-core"
 
 const props = defineProps<{
   visible: boolean

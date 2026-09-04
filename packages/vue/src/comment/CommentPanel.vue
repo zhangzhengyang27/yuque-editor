@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from "vue"
-import type { Comment } from "./types"
+import type { Comment } from "yuque-editor-core"
 import CommentCard from "./CommentCard.vue"
 
 const props = defineProps<{

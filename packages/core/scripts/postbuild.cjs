@@ -20,9 +20,10 @@ const dist = path.resolve(root, "dist")
 const ENTRIES = ["index", "assets", "vite-assets", "editor", "controlled", "react", "vue"]
 
 // tsc 产物的相对导入形态：CJS 的 require("./x")、ESM 的 from/import "./x"
-// （同时兼容单双引号；\w.- 覆盖 vite-assets 这类连字符命名）
-const CJS_IMPORT = /require\((["'])\.\/([\w.-]+)\1\)/g
-const ESM_IMPORT = /(from|import)\s*(["'])\.\/([\w.-]+)\2/g
+// （同时兼容单双引号；\w.- 覆盖 vite-assets 这类连字符命名，\/
+//  覆盖 comment/types 这类子目录模块）
+const CJS_IMPORT = /require\((["'])\.\/([\w./-]+)\1\)/g
+const ESM_IMPORT = /(from|import)\s*(["'])\.\/([\w./-]+)\2/g
 
 function mustExist(p) {
   if (!fs.existsSync(p)) throw new Error(`Missing build output: ${p}`)
@@ -84,7 +85,12 @@ function processModule(name, processed) {
   rewriteFile(cjsFile, [[CJS_IMPORT, (_m, _q, dep) => `require('./${dep}.cjs')`]])
   rewriteFile(esmFile, [[ESM_IMPORT, (_m, kw, _q, dep) => `${kw} './${dep}.mjs'`]])
 
-  for (const dep of deps) processModule(dep, processed)
+  // 子目录模块（如 comment/comment-manager）的相对导入要按其所在目录解析：
+  // "./highlight-engine" 相当于 "comment/highlight-engine"，而非根下的 highlight-engine
+  const moduleDir = path.posix.dirname(name)
+  for (const dep of deps) {
+    processModule(path.posix.normalize(path.posix.join(moduleDir, dep)), processed)
+  }
 }
 
 const processed = new Set()
