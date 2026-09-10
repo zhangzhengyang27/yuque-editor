@@ -350,6 +350,11 @@ export const YuqueRichText = defineComponent({
       getWordCount() {
         return api?.getWordCount() ?? 0
       },
+      // YuqueEditorRef 接口声明了 execCommand（通用命令透传），此前 expose 漏列导致
+      // 宿主经组件 ref 调用时运行时报 not a function（如工具栏自定义按钮插入卡片）
+      execCommand(command: string, ...args: unknown[]) {
+        api?.execCommand(command, ...args)
+      },
     })
 
     return () => h("div", { ref: container })
