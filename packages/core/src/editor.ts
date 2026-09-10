@@ -649,6 +649,17 @@ export async function createYuqueEditor(options: YuqueEditorOptions): Promise<Yu
         editor.execCommand!(cmd, ...args)
         return undefined
       }, undefined)
+      // Lake search 插件的 replaceText/replaceAll 在查找上下文内提交事务，不触发
+      // contentchange 事件，宿主 v-model 会停留在替换前的内容（自动保存/⌘S 保存
+      // 旧值，刷新即丢改动）。这里对替换类命令补一次与 contentchange 监听同逻辑
+      // 的内容同步。
+      if (cmd === "replaceText" || cmd === "replaceAll") {
+        const v = safeCall(() => editor.getDocument(currentScheme, { includeMeta: true }), "")
+        if (v !== lastSetContent) {
+          lastSetContent = ""
+          options.onChange?.(v)
+        }
+      }
     }
   }
 
