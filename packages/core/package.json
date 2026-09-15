@@ -1,5 +1,5 @@
 {
-  "name": "yuque-editor-core",
+  "name": "@zhangzhengyang27/yuque-editor-core",
   "description": "Yuque/Lake editor core with offline assets",
   "version": "0.1.0",
   "license": "MIT",
@@ -102,13 +102,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zhangzhengyang27/yuque-editor-core.git"
+    "url": "git+https://github.com/zhangzhengyang27/yuque-editor.git",
+    "directory": "packages/core"
   },
   "bugs": {
-    "url": "https://github.com/zhangzhengyang27/yuque-editor-core/issues"
+    "url": "https://github.com/zhangzhengyang27/yuque-editor/issues"
   },
-  "homepage": "https://github.com/zhangzhengyang27/yuque-editor-core#readme",
+  "homepage": "https://github.com/zhangzhengyang27/yuque-editor#readme",
   "publishConfig": {
-    "access": "public"
+    "registry": "https://npm.pkg.github.com"
   }
 }

@@ -341,6 +341,43 @@ npm pack --dry-run
 - `dist/*.d.ts` — TypeScript 类型声明
 - `dist/yuque-assets/*` — 离线静态资源目录
 
+### 发布到 GitHub Packages（私有分发）
+
+包内含语雀专有编译产物（`dist/yuque-assets/doc.umd.js` 等），**只走私有渠道分发，不发布到公共 npm**。发布目标为 GitHub Packages（`publishConfig.registry` 已配置）。
+
+一次性准备（发布者本机）：
+
+```bash
+# 1. 创建 classic PAT（勾选 write:packages、read:packages）：
+#    https://github.com/settings/tokens/new?scopes=write:packages,read:packages
+# 2. 写入用户级 ~/.npmrc（不要提交进任何仓库）：
+#    //npm.pkg.github.com/:_authToken=<你的TOKEN>
+```
+
+每次发布：
+
+```bash
+# 改完代码 → 升版本（package.json version）→ 构建 + 发布（prepack 自动构建）
+cd packages/core
+npm version patch   # 或 minor / major
+npm publish         # registry 已由 publishConfig 指向 npm.pkg.github.com
+git push --tags
+```
+
+消费方接入：
+
+```jsonc
+// package.json（pnpm alias 保持原 import 路径不变）
+"yuque-editor-core": "npm:@zhangzhengyang27/yuque-editor-core@^0.1.0"
+```
+
+```ini
+# .npmrc（用户级放 authToken；项目级放 registry 映射，可提交）
+@zhangzhengyang27:registry=https://npm.pkg.github.com
+```
+
+**注意**：包所在仓库是公开的，首次 publish 后包可见性会继承为 public——发布后需到 GitHub 包页面（Package settings → Change visibility）改为 **Private**，避免语雀资产公开可下载。
+
 ### 技术实现要点
 
 **资源加载策略** — `ensureAssets` 采用分层并行加载，减少 RTT 等待：
