@@ -51,6 +51,10 @@ export interface YuqueEditorOptions {
   onBeforeDestroy?: () => void
   uploadImage?: EditorUploadHandler
   uploadVideo?: EditorUploadHandler
+  /** 附件/本地文件卡片上传（附件、本地文件菜单项） */
+  uploadFile?: EditorUploadHandler
+  /** 音频卡片上传（本地音频菜单项） */
+  uploadAudio?: EditorUploadHandler
   showToolbar?: boolean
   showToc?: boolean
   paragraphSpacing?: boolean
@@ -206,7 +210,21 @@ interface ThirdPartyEditorOptions {
     createUploadPromise: (request: ThirdPartyUploadRequest) => Promise<UploadResult>
   }
   video?: {
-    createUploadPromise: (request: ThirdPartyUploadRequest) => Promise<UploadResult>
+    createUploadPromise: (data: string | File) => Promise<UploadResult>
+  }
+  file?: {
+    createUploadPromise: (data: File) => Promise<UploadResult>
+  }
+  audio?: {
+    createUploadPromise: (data: File) => Promise<UploadResult>
+    /**
+     * 音频卡上传完成后的播放地址解析（替代 Yuque 服务端转码轮询）。
+     * Lake 音频卡完成上传后用 queryAudioUrl 换取最终播放/下载地址；
+     * 自有存储直接返回上传 URL 即可。
+     */
+    queryAudioUrl?: (cardData: {
+      getAudioInfo?: () => { id?: string | null; url?: string | null } | null
+    }) => Promise<{ audioUrl: string; downloadUrl: string }>
   }
   toolbar?: {
     agentConfig?: {
@@ -559,14 +577,38 @@ export async function createYuqueEditor(options: YuqueEditorOptions): Promise<Yu
           },
         }
       : undefined,
+    // video/file/audio 三个通道与 image 不同：Lake 把原始负载（本地文件，或视频 URL）
+    // 直接作为首参交给 createUploadPromise，而不是 { type, data } 请求对象
+    //（见 doc.umd.js 中 JSe/zCe/GFe 任务包装类与各插件 option 的调用点）。
     video: options.uploadVideo
       ? {
-          async createUploadPromise(request: ThirdPartyUploadRequest) {
-            const type = request.type as "url" | "file" | "base64"
+          async createUploadPromise(data: string | File) {
             return options.uploadVideo!({
-              type: type ?? "file",
-              data: request.data,
+              type: typeof data === "string" ? "url" : "file",
+              data,
             })
+          },
+        }
+      : undefined,
+    file: options.uploadFile
+      ? {
+          async createUploadPromise(data: File) {
+            return options.uploadFile!({ type: "file", data })
+          },
+        }
+      : undefined,
+    audio: options.uploadAudio
+      ? {
+          async createUploadPromise(data: File) {
+            const result = await options.uploadAudio!({ type: "file", data })
+            // Lake 音频卡的完成回调按 Yuque 传统响应取值（video_id/audioId、filesize、
+            // filename），不认 UploadResult 的 url/size 命名——这里做一次字段适配。
+            return { ...result, audioId: result.url, filesize: result.size }
+          },
+          async queryAudioUrl(cardData) {
+            const info = cardData?.getAudioInfo?.()
+            const url = info?.url || info?.id || ""
+            return { audioUrl: url, downloadUrl: url }
           },
         }
       : undefined,
