@@ -8,6 +8,7 @@
 > - `destroy()` 先把 `disposed` 置位再调用 `onBeforeDestroy`（宿主回调抛异常不再导致资源泄漏）
 > - 新增 `DEFAULT_TOOLBAR_ITEMS` 快照与 `buildToolbarConfig()`：`disabledToolbarItems` 现在从默认列表**剔除**（旧版误把禁用项当白名单传入）；同时支持 `toolbarItems` 白名单
 > - 资源节点查找改为按 `data-yuque-asset` 遍历比对，URL 含引号等特殊字符不再破坏 CSS 选择器
+> - **上传通道重构（2026-09-16）**：新增 `uploadFile` / `uploadAudio` 选项；`video` 通道回调契约修正——Lake 的 video/file/audio 三通道把原始 File 直接交给 `createUploadPromise`（JSe/zCe/GFe 任务包装），与 image 的 `{type,data}` 请求对象不同，本文 §「上传」相关小节与 §映射表以 [06-upload-channels.md](./06-upload-channels.md) 为准
 
 ---
 

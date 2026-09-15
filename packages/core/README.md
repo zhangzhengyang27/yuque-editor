@@ -102,9 +102,9 @@ Vue 3：通过 `@error` 事件监听。
 <YuqueRichText :value="value" @change="onChange" @error="onError" />
 ```
 
-### 图片 / 视频上传
+### 媒体上传（图片 / 视频 / 附件 / 音频）
 
-通过 `uploadImage` / `uploadVideo` 钩子接入自定义上传逻辑，支持 `url`、`file`、`base64` 三类输入：
+四个钩子接入自定义上传逻辑，**宿主侧契约完全一致**（`EditorUploadHandler`，入参 `{ type, data }`，支持 `url`、`file`、`base64` 三类输入）；内核与 Lake 对接的差异（请求对象 vs 原始 File）已在内核内适配完毕，详见 [docs/06-upload-channels.md](../../docs/06-upload-channels.md)：
 
 ```tsx
 <YuqueRichText
@@ -118,13 +118,18 @@ Vue 3：通过 `@error` 事件监听。
     } else {
       // base64 string 需要自行转换或上传
     }
-    const res = await fetch("/api/upload", { method: "POST", body: formData })
+    const res = await fetch("/api/your-upload", { method: "POST", body: formData })
     const json = await res.json()
     // 返回 url（必填）、size（必填）、filename（可选）、cover（视频封面，可选）
     return { url: json.url, size: json.size, filename: json.filename }
   }}
+  uploadVideo={uploadToOss}   // slash 菜单「本地视频」
+  uploadFile={uploadToOss}    // slash 菜单「附件」「本地文件」
+  uploadAudio={uploadToOss}   // slash 菜单「本地音频」
 />
 ```
+
+⚠️ **不配置钩子的通道会走 Lake 内置默认上传端点（`/api/upload*`）**——宿主后端几乎必然没有这个路由，插入即 404、卡片停在错误态。只读查看器不受影响；编辑场景要么四个钩子都配齐，要么明确接受对应卡片不可用。
 
 ### 调试模式
 
@@ -304,7 +309,9 @@ sequenceDiagram
 | `onFocusStatusChange`  | `(focused: boolean) => void` | 焦点状态变化时触发                                                                                                   |
 | `onBeforeDestroy`      | `() => void`                 | 编辑器销毁前触发                                                                                                     |
 | `uploadImage`          | `EditorUploadHandler`        | 图片上传钩子，入参 `{ type, data }`                                                                                  |
-| `uploadVideo`          | `EditorUploadHandler`        | 视频上传钩子，入参 `{ type, data }`                                                                                  |
+| `uploadVideo`          | `EditorUploadHandler`        | 视频上传钩子（slash「本地视频」），入参 `{ type, data }`                                                             |
+| `uploadFile`           | `EditorUploadHandler`        | 附件上传钩子（slash「附件」「本地文件」），入参 `{ type, data }`                                                     |
+| `uploadAudio`          | `EditorUploadHandler`        | 音频上传钩子（slash「本地音频」），入参 `{ type, data }`                                                             |
 | `showToolbar`          | `boolean`                    | 控制工具栏显示，默认 `true`                                                                                          |
 | `showToc`              | `boolean`                    | 控制目录（大纲）显示；开启后自动注入样式，大纲展开时为正文让出右侧空间（`lake-dom.ts` 的 `ensureTocAvoidanceStyle`） |
 | `paragraphSpacing`     | `boolean`                    | 段落间距（经典排版）                                                                                                 |
@@ -320,7 +327,7 @@ sequenceDiagram
 - **`window.Doc` 未定义**：通常是 `doc.umd.js` 未加载成功，或资源加载顺序被外部脚本打断。
 - **受控模式循环更新**：核心的 `lastSetContent` 比对 + 封装层的 `ValueSyncer`（`src/controlled.ts`）会抑制回声，正常使用即可。如仍有问题，检查 `onChange` 回调中是否直接回写了相同值。
 - **切换 `scheme` 后内容异常**：切换格式会重建编辑器实例，确保上层同时更新了对应格式的 `value`。
-- **上传失败**：检查 `uploadImage` / `uploadVideo` 返回值是否包含 `url` 和 `size` 字段。
+- **上传失败**：检查四个上传钩子（`uploadImage` / `uploadVideo` / `uploadFile` / `uploadAudio`）返回值是否包含 `url` 和 `size` 字段。未配置钩子的媒体通道会走 Lake 内置默认端点 `/api/upload*`（见「媒体上传」一节的警告）；音频卡另有 `queryAudioUrl` 换播放地址的机制，见 [docs/06-upload-channels.md](../../docs/06-upload-channels.md)。
 - **多实例样式冲突**：资源加载器内置去重机制，同名资源只加载一次。
 - **实例重建抖动**：React/Vue 组件使用 `shallowEqual` 浅比较配置项，只有真正变化时才重建实例。如果函数引用频繁变化，考虑用 `useCallback` / `computed` 稳定化；函数实现真正变了（如切换上传后端）需重建时，改变 `instanceKey` 即可。
 

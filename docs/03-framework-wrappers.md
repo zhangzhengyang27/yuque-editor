@@ -9,6 +9,7 @@
 > - Vue 封装同样采用了 `pendingOnLoad` 拦截机制（见 3.4 节的旧描述已过时）
 > - 两个组件新增 `instanceKey` prop（函数型配置无法触发重建时的逃生舱）
 > - props 新增 `toolbarItems`（白名单）与 `disabledToolbarItems`（从默认列表剔除，见 `editor.ts` 的 `DEFAULT_TOOLBAR_ITEMS`）
+> - props 新增 `uploadFile` / `uploadAudio` 上传通道，`uploadVideo` 回调契约已修正（Lake 三媒体通道传原始 File，非请求对象）——详见 [06-upload-channels.md](./06-upload-channels.md)
 
 ## 1. 概述
 
