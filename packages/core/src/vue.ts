@@ -79,6 +79,20 @@ export const YuqueRichText = defineComponent({
       type: [String, Number] as PropType<string | number>,
       required: false,
     },
+    emptyPlaceholder: {
+      type: String,
+      required: false,
+    },
+    /**
+     * 高度自适应模式：跳过 applyEditorLayout 的容器链拉伸（flex/100%），
+     * 编辑器随内容自然生长，由宿主外层滚动容器接管滚动。
+     * 用于阅读模式等「正文 + 文末内容」同流滚动的场景；编辑态不要开启。
+     */
+    autoHeight: {
+      type: Boolean,
+      required: false,
+      default: false,
+    },
   },
   emits: [
     "change",
@@ -114,6 +128,8 @@ export const YuqueRichText = defineComponent({
       darkMode: props.darkMode,
       disabledToolbarItems: props.disabledToolbarItems,
       toolbarItems: props.toolbarItems,
+      emptyPlaceholder: props.emptyPlaceholder,
+      autoHeight: props.autoHeight,
       instanceKey: props.instanceKey,
     }
 
@@ -155,6 +171,7 @@ export const YuqueRichText = defineComponent({
           darkMode: props.darkMode,
           disabledToolbarItems: props.disabledToolbarItems,
           toolbarItems: props.toolbarItems,
+          emptyPlaceholder: props.emptyPlaceholder,
           onLoad: () => {
             pendingOnLoad = true
           },
@@ -184,7 +201,12 @@ export const YuqueRichText = defineComponent({
             getContent: (scheme) => nextApi.getContent(scheme),
             setContent: (content, scheme) => nextApi.setContent(content, scheme),
             isRendered: (content) => hasRenderedContent(container.value, content),
-            beforeSync: () => applyEditorLayout(container.value),
+            beforeSync: () => {
+              // autoHeight 模式跳过容器链拉伸，编辑器高度随内容自适应
+              if (!props.autoHeight) {
+                applyEditorLayout(container.value)
+              }
+            },
           },
           props.value,
           props.scheme,
@@ -236,6 +258,8 @@ export const YuqueRichText = defineComponent({
           props.darkMode,
           props.disabledToolbarItems,
           props.toolbarItems,
+          props.emptyPlaceholder,
+          props.autoHeight,
           props.instanceKey,
         ] as const,
       async () => {
@@ -256,6 +280,8 @@ export const YuqueRichText = defineComponent({
           darkMode: props.darkMode,
           disabledToolbarItems: props.disabledToolbarItems,
           toolbarItems: props.toolbarItems,
+          emptyPlaceholder: props.emptyPlaceholder,
+          autoHeight: props.autoHeight,
           instanceKey: props.instanceKey,
         }
         const changed = configKeys.some((k) => !shallowEqual(lastConfig[k], nextConfig[k]))

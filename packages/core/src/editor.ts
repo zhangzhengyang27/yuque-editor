@@ -62,6 +62,8 @@ export interface YuqueEditorOptions {
   darkMode?: boolean
   disabledToolbarItems?: string[]
   toolbarItems?: string[]
+  /** 空文档占位提示文案（仅编辑态且正文为空时显示；对齐语雀「输入 / 唤起更多」） */
+  emptyPlaceholder?: string
 }
 
 /**
@@ -621,6 +623,48 @@ export async function createYuqueEditor(options: YuqueEditorOptions): Promise<Yu
   let lastEmitted = ""
   const disposers: Array<() => void> = []
 
+  // 空文档占位提示层（对齐语雀空段落「输入 / 唤起更多」）：仅编辑态且正文无文本时
+  // 显示。挂在 editorRoot 上并定位到引擎首个块级元素，pointer-events 关闭不拦截输入；
+  // 定位只读布局几何，不依赖 Lake 行为，引擎未挂出 .ne-engine 时静默跳过。
+  let emptyHint: HTMLDivElement | null = null
+  const syncEmptyHint = () => {
+    if (disposed) return
+    const enabled = !options.readOnly && !!options.emptyPlaceholder
+    if (enabled && editorRoot.style.position !== "relative") {
+      editorRoot.style.position = "relative"
+    }
+    const engine = editorRoot.querySelector(".ne-engine")
+    const text = engine?.textContent?.trim() ?? ""
+    if (enabled && text.length === 0) {
+      if (!emptyHint) {
+        emptyHint = document.createElement("div")
+        emptyHint.className = "yuque-editor-empty-hint"
+        emptyHint.textContent = options.emptyPlaceholder ?? ""
+        Object.assign(emptyHint.style, {
+          position: "absolute",
+          pointerEvents: "none",
+          userSelect: "none",
+          whiteSpace: "nowrap",
+          color: options.darkMode ? "rgba(255, 255, 255, 0.28)" : "rgba(0, 0, 0, 0.25)",
+        })
+        editorRoot.appendChild(emptyHint)
+      }
+      const firstBlock = engine?.querySelector("p") ?? engine?.firstElementChild
+      if (firstBlock instanceof HTMLElement) {
+        const rootRect = editorRoot.getBoundingClientRect()
+        const blockRect = firstBlock.getBoundingClientRect()
+        const blockStyle = window.getComputedStyle(firstBlock)
+        emptyHint.style.left = `${Math.max(0, blockRect.left - rootRect.left)}px`
+        emptyHint.style.top = `${Math.max(0, blockRect.top - rootRect.top)}px`
+        emptyHint.style.fontSize = blockStyle.fontSize
+        emptyHint.style.lineHeight = blockStyle.lineHeight
+      }
+    } else if (emptyHint) {
+      emptyHint.remove()
+      emptyHint = null
+    }
+  }
+
   /**
    * 内容比对同步：getDocument 与 lastSetContent 有差异才发 onChange。
    * Lake search 的 replaceText/replaceAll 部分路径（如面板「全部替换」）直接改模型
@@ -674,6 +718,7 @@ export async function createYuqueEditor(options: YuqueEditorOptions): Promise<Yu
   if (typeof editor?.on === "function") {
     const off = editor.on("contentchange", () => {
       if (disposed) return
+      syncEmptyHint()
       const v = safeCall(() => editor.getDocument(currentScheme, { includeMeta: true }), "")
       if (v === lastSetContent) {
         lastSetContent = "" // 只跳过一次
@@ -728,6 +773,8 @@ export async function createYuqueEditor(options: YuqueEditorOptions): Promise<Yu
       return undefined
     }, undefined)
   }
+  // 初始灌值后布局尚未稳定，等首帧渲染完成再定位占位提示
+  requestAnimationFrame(syncEmptyHint)
 
   try {
     options.onLoad?.()
@@ -771,6 +818,7 @@ export async function createYuqueEditor(options: YuqueEditorOptions): Promise<Yu
       lastSetContent = content
       safeCall(() => {
         editor.setDocument(type, content)
+        syncEmptyHint()
         return undefined
       }, undefined)
     },
