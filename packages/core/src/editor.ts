@@ -617,7 +617,59 @@ export async function createYuqueEditor(options: YuqueEditorOptions): Promise<Yu
   let disposed = false
   /** 记录最后一次 setDocument 设置的内容，用于避免多余 onChange 派发 */
   let lastSetContent = ""
+  /** 最近一次已派发 onChange 的内容（观察垫片与 contentchange 双通道去重） */
+  let lastEmitted = ""
   const disposers: Array<() => void> = []
+
+  /**
+   * 内容比对同步：getDocument 与 lastSetContent 有差异才发 onChange。
+   * Lake search 的 replaceText/replaceAll 部分路径（如面板「全部替换」）直接改模型
+   * 而不派发 contentchange，宿主 v-model 停留在替换前内容（自动保存/⌘S 保存旧值，
+   * 刷新即丢改动，2026-09-20 网络探针实证）；面板持有内核内部 renderer，宿主侧
+   * execCommand 包装拦截不到，故以 DOM 观察垫片兜底（见下）。
+   */
+  const syncContentFromShell = () => {
+    if (disposed) return
+    const v = safeCall(() => editor.getDocument(currentScheme, { includeMeta: true }), "")
+    if (v !== lastSetContent && v !== lastEmitted) {
+      lastSetContent = ""
+      lastEmitted = v
+      options.onChange?.(v)
+    }
+  }
+  if (typeof editor?.execCommand === "function") {
+    const originalExecCommand = editor.execCommand.bind(editor)
+    editor.execCommand = (cmd: string, ...args: unknown[]) => {
+      const result = originalExecCommand(cmd, ...args)
+      if (cmd === "replaceText" || cmd === "replaceAll") {
+        syncContentFromShell()
+      }
+      return result
+    }
+  }
+  /**
+   * DOM 变更观察垫片：捕获绕过 contentchange 的模型变更（全部替换等）。
+   * 正常输入路径 contentchange 已派发 onChange 并记入 lastEmitted，此处比对为空转；
+   * 防抖 250ms 合并替换引发的批量 DOM 变更。
+   */
+  let shellSyncTimer: number | null = null
+  const shellObserver =
+    typeof MutationObserver !== "undefined"
+      ? new MutationObserver(() => {
+          if (shellSyncTimer !== null) window.clearTimeout(shellSyncTimer)
+          shellSyncTimer = window.setTimeout(() => {
+            shellSyncTimer = null
+            syncContentFromShell()
+          }, 250)
+        })
+      : null
+  if (shellObserver) {
+    shellObserver.observe(editorRoot, { childList: true, characterData: true, subtree: true })
+    disposers.push(() => {
+      if (shellSyncTimer !== null) window.clearTimeout(shellSyncTimer)
+      shellObserver.disconnect()
+    })
+  }
 
   if (typeof editor?.on === "function") {
     const off = editor.on("contentchange", () => {
@@ -627,6 +679,7 @@ export async function createYuqueEditor(options: YuqueEditorOptions): Promise<Yu
         lastSetContent = "" // 只跳过一次
         return
       }
+      lastEmitted = v
       options.onChange?.(v)
     })
     if (typeof off === "function") disposers.push(off)
@@ -691,17 +744,7 @@ export async function createYuqueEditor(options: YuqueEditorOptions): Promise<Yu
         editor.execCommand!(cmd, ...args)
         return undefined
       }, undefined)
-      // Lake search 插件的 replaceText/replaceAll 在查找上下文内提交事务，不触发
-      // contentchange 事件，宿主 v-model 会停留在替换前的内容（自动保存/⌘S 保存
-      // 旧值，刷新即丢改动）。这里对替换类命令补一次与 contentchange 监听同逻辑
-      // 的内容同步。
-      if (cmd === "replaceText" || cmd === "replaceAll") {
-        const v = safeCall(() => editor.getDocument(currentScheme, { includeMeta: true }), "")
-        if (v !== lastSetContent) {
-          lastSetContent = ""
-          options.onChange?.(v)
-        }
-      }
+      // 替换类命令的 onChange 同步由上方包装的实例方法统一处理（含内核内部调用方）
     }
   }
 
