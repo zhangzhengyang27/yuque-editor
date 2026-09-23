@@ -1,4 +1,4 @@
-# yuque-editor-core
+# @zhangzhengyang27/yuque-editor-core
 
 语雀（Lake）编辑器的核心封装，默认使用离线资源，不依赖运行时联网。
 
@@ -15,11 +15,18 @@
 
 ## 安装
 
+包发布在 GitHub Packages 私有源（不发布到公共 npm），安装前需要配置 `.npmrc` 的 registry 映射与 token，见下文「发布到 GitHub Packages（私有分发）」的消费方接入一节。
+
 ```bash
-pnpm add yuque-editor-core
+# 装最新版
+pnpm add @zhangzhengyang27/yuque-editor-core
+
+# 锁定版本（推荐，私有源解析 latest 同样需要 token）
+pnpm add @zhangzhengyang27/yuque-editor-core@0.2.0
 ```
 
 > React 和 Vue 为可选 peer dependency，按需安装即可。
+> 下文 import 路径统一使用发布名 `@zhangzhengyang27/yuque-editor-core`；如果想保留短路径写法，可以用 npm alias 把包映射成 `yuque-editor-core`（见消费方接入一节）。
 
 ## 资源（离线）
 
@@ -32,7 +39,7 @@ pnpm add yuque-editor-core
 ### 原生（DOM）
 
 ```ts
-import { createYuqueEditor } from "yuque-editor-core/editor"
+import { createYuqueEditor } from "@zhangzhengyang27/yuque-editor-core/editor"
 
 const ref = await createYuqueEditor({
   container: document.getElementById("app")!,
@@ -43,8 +50,8 @@ const ref = await createYuqueEditor({
 ### React
 
 ```tsx
-import { YuqueRichText } from "yuque-editor-core/react"
-import type { YuqueEditorRef } from "yuque-editor-core/editor"
+import { YuqueRichText } from "@zhangzhengyang27/yuque-editor-core/react"
+import type { YuqueEditorRef } from "@zhangzhengyang27/yuque-editor-core/editor"
 
 export default function App() {
   const [value, setValue] = React.useState("<p>Hello</p>")
@@ -63,8 +70,8 @@ export default function App() {
 
 <script setup lang="ts">
 import { ref } from "vue"
-import { YuqueRichText } from "yuque-editor-core/vue"
-import type { YuqueEditorRef } from "yuque-editor-core/editor"
+import { YuqueRichText } from "@zhangzhengyang27/yuque-editor-core/vue"
+import type { YuqueEditorRef } from "@zhangzhengyang27/yuque-editor-core/editor"
 
 const editorRef = ref<YuqueEditorRef | null>(null)
 const value = ref("<p>Hello</p>")
@@ -144,7 +151,7 @@ YUQUE_EDITOR_DEBUG=1 pnpm dev
 按需向应用提供编辑器离线资源——**dev 通过静态中间件实时提供，build 通过 `emitFile` 打进产物目录**，不写入源码 `public/`：
 
 ```ts
-import { yuqueAssets } from "yuque-editor-core/vite-assets"
+import { yuqueAssets } from "@zhangzhengyang27/yuque-editor-core/vite-assets"
 
 export default {
   plugins: [yuqueAssets()],
@@ -238,7 +245,11 @@ editorRef.current?.destroy()
 除了编辑器组件，还导出了一些内部工具函数，可在特殊场景下使用：
 
 ```ts
-import { shallowEqual, normalizeError, resetAssetLoaders } from "yuque-editor-core/editor"
+import {
+  shallowEqual,
+  normalizeError,
+  resetAssetLoaders,
+} from "@zhangzhengyang27/yuque-editor-core/editor"
 
 // 浅比较 — 用于判断对象/函数是否语义相等
 shallowEqual({ a: 1 }, { a: 1 }) // true
@@ -361,27 +372,52 @@ npm pack --dry-run
 #    //npm.pkg.github.com/:_authToken=<你的TOKEN>
 ```
 
-每次发布：
+每次发布（完整流程见仓库根 [README.md](../../README.md) 的「发布指南」）：
 
 ```bash
-# 改完代码 → 升版本（package.json version）→ 构建 + 发布（prepack 自动构建）
+# 1. 发布前守门（与 CI 一致）
+pnpm lint && pnpm format:check && pnpm test && pnpm build && node scripts/verify-dist.mjs
+
+# 2. 升版本（用 --no-git-tag-version，理由见下方坑位 1）
 cd packages/core
-npm version patch   # 或 minor / major
-npm publish         # registry 已由 publishConfig 指向 npm.pkg.github.com
-git push --tags
+npm version patch --no-git-tag-version   # 或 minor / major
+
+# 3. 提交版本号并打 tag
+cd ../..
+git add packages/core/package.json
+git commit -m "chore(release): core v0.2.1"
+git tag v0.2.1
+
+# 4. 发布（prepack 会自动执行 pnpm run build，无需手动构建）
+cd packages/core
+npm publish          # registry 已由 publishConfig 指向 npm.pkg.github.com
+cd ../..
+
+# 5. 推送主干与 tag
+git push origin main && git push origin v0.2.1
 ```
+
+> **两个实测坑**：
+>
+> 1. `npm version patch` 在本仓库（npm 11 + pnpm workspace）只改 `package.json` 的 version 就退出，既不 commit 也不 tag（`git-tag-version=true` 也一样），所以第 3 步必须手动做。
+> 2. `git push --follow-tags` 推不上本次 tag：`git tag` 建的是轻量 tag，而 `--follow-tags` 只推 annotated tag。用显式的 `git push origin v0.2.1`。
 
 消费方接入：
 
 ```jsonc
-// package.json（pnpm alias 保持原 import 路径不变）
-"yuque-editor-core": "npm:@zhangzhengyang27/yuque-editor-core@^0.1.0"
+// 方式一（推荐）：直接装发布名，import 时用带 scope 的全名
+"@zhangzhengyang27/yuque-editor-core": "^0.2.0"
+
+// 方式二：npm alias 成短名，保留 yuque-editor-core/xxx 的 import 路径
+"yuque-editor-core": "npm:@zhangzhengyang27/yuque-editor-core@^0.2.0"
 ```
 
 ```ini
 # .npmrc（用户级放 authToken；项目级放 registry 映射，可提交）
 @zhangzhengyang27:registry=https://npm.pkg.github.com
 ```
+
+> 缺项目级 registry 映射时，包管理器会去公共源找 `@zhangzhengyang27/*` 并报 404；缺 token（`read:packages` 权限的 classic PAT）则报 401/ENOTFOUND。
 
 **注意**：包所在仓库是公开的，首次 publish 后包可见性会继承为 public——发布后需到 GitHub 包页面（Package settings → Change visibility）改为 **Private**，避免语雀资产公开可下载。
 

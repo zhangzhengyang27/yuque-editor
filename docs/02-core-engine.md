@@ -1,6 +1,6 @@
 # 02 - 核心引擎
 
-> 本篇深入分析 `packages/core/src/editor.ts`（现约 760 行），这是整个 yuque-editor-core 包最核心的文件。它负责完成三件事：**加载第三方离线资源 → 初始化语雀 Lake Editor → 暴露简洁的实例 API**。
+> 本篇深入分析 `packages/core/src/editor.ts`（现约 760 行），这是整个 `@zhangzhengyang27/yuque-editor-core` 包最核心的文件。它负责完成三件事：**加载第三方离线资源 → 初始化语雀 Lake Editor → 暴露简洁的实例 API**。
 
 > 📌 **文档状态（2026-09 代码已演进）**：文中行号是编写时的快照，以下改动未逐处回填，请以源码为准：
 > - `stripHtml` 改用 `DOMParser` 解析（旧版 `innerHTML` 在游离节点上也会触发 `<img onerror>` 等副作用，属 XSS 隐患），并在块级元素间补空格避免英文单词粘连

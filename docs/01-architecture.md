@@ -10,7 +10,7 @@
 
 ### 1.1 项目是什么
 
-**yuque-editor** 的核心目标非常明确：把语雀的 Lake Editor 封装成一个独立、可离线使用的 npm 包 —— `yuque-editor-core`。
+**yuque-editor** 的核心目标非常明确：把语雀的 Lake Editor 封装成一个独立、可离线使用的 npm 包 —— `@zhangzhengyang27/yuque-editor-core`（下文统一简称 `yuque-editor-core`，该短名只在 monorepo 内部引用时使用）。
 
 语雀的 Lake Editor 是一个功能强大的富文本编辑器，支持 HTML/Markdown 双格式、公式、代码块、图片/视频上传等。但它有一些"原生"的问题：
 
@@ -139,6 +139,8 @@ Monorepo 让这一切变成：改 core → `pnpm dev:react` / `pnpm dev:vue` →
 
 这个协议告诉 pnpm："直接用本地 workspace 里的版本，别去 registry 下"。发布时 pnpm 会自动把 `workspace:*` 替换成实际版本号。这让你在开发阶段随时修改 core 的代码，示例项目**不需要重新安装**就能拿到最新代码。
 
+> 注意短名与发布名的区别：monorepo 内部示例用短名 `yuque-editor-core` 引用本地 `packages/core`，pnpm 在 lockfile 里把它解析为 `link:../core` 的目录依赖；而该包对外的发布名是 `@zhangzhengyang27/yuque-editor-core`，外部项目要按发布名安装，import 也要写带 scope 的全名。
+
 **pnpm vs npm vs yarn 对比**：
 
 | 特性 | pnpm | npm | yarn (v1/v3) |
@@ -206,7 +208,7 @@ yuque-editor/
 ├── docs/                      # 文档目录
 │   └── 01-architecture.md     # ← 你正在读的文档
 └── packages/
-    ├── core/                  # 🎯 核心包 yuque-editor-core
+    ├── core/                  # 🎯 核心包（发布名 @zhangzhengyang27/yuque-editor-core）
     │   ├── package.json
     │   ├── tsconfig.*.json    # 5 个 TypeScript 配置
     │   ├── src/               # 源代码（6 个文件）
@@ -311,16 +313,16 @@ yuque-editor/
 
 ```typescript
 // ✅ 只要编辑器 API，不会引入 React/Vue 代码
-import { createYuqueEditor } from "yuque-editor-core/editor"
+import { createYuqueEditor } from "@zhangzhengyang27/yuque-editor-core/editor"
 
 // ✅ 只用 React 组件
-import { YuqueRichText } from "yuque-editor-core/react"
+import { YuqueRichText } from "@zhangzhengyang27/yuque-editor-core/react"
 
 // ✅ 只用 Vite 插件
-import { yuqueAssets } from "yuque-editor-core/vite-assets"
+import { yuqueAssets } from "@zhangzhengyang27/yuque-editor-core/vite-assets"
 
 // ❌ 如果只有一个入口，import React 组件时会拉入 Vue 的代码（反之亦然）
-import { YuqueRichText } from "yuque-editor-core" // 可能包含不需要的代码
+import { YuqueRichText } from "@zhangzhengyang27/yuque-editor-core" // 可能包含不需要的代码
 ```
 
 每个子路径都有三个条件导出（`types` / `import` / `require`），这是现代 npm 包的**标准三件套**：
@@ -915,18 +917,26 @@ export interface SimpleVitePlugin {
 ### 5.3 资源目录搜索策略（精简候选 + 环境变量）
 
 ```typescript
-async function findLocalAssetsDir(searchRoot: string): Promise<string> {
+// 发布名带 scope，alias 短名安装也要支持，所以两种 node_modules 目录名都作为候选
+const PACKAGE_DIR_NAMES = ["yuque-editor-core", "@zhangzhengyang27/yuque-editor-core"]
+
+function nodeModulesAssetCandidates(root: string): string[] {
+  return PACKAGE_DIR_NAMES.flatMap((packageDir) => [
+    path.resolve(root, "node_modules", packageDir, "dist", "yuque-assets"),
+    path.resolve(root, "node_modules", packageDir, "assets", "yuque-assets")
+  ])
+}
+
+export async function findLocalAssetsDir(searchRoot: string): Promise<string> {
   const envDir = process.env.YUQUE_ASSETS_DIR
   const cwd = process.cwd()
   const candidates = uniquePaths([
     envDir ?? "",
     // 包自带的资源目录（monorepo 内开发 / 源码运行）
     path.resolve(searchRoot, "assets/yuque-assets"),
-    // 使用方 node_modules 里的安装产物
-    path.resolve(searchRoot, "node_modules/yuque-editor-core/dist/yuque-assets"),
-    path.resolve(searchRoot, "node_modules/yuque-editor-core/assets/yuque-assets"),
-    path.resolve(cwd, "node_modules/yuque-editor-core/dist/yuque-assets"),
-    path.resolve(cwd, "node_modules/yuque-editor-core/assets/yuque-assets"),
+    // 使用方 node_modules 里的安装产物（带 scope 的发布名 + alias 短名）
+    ...nodeModulesAssetCandidates(searchRoot),
+    ...nodeModulesAssetCandidates(cwd),
     path.resolve(cwd, "assets/yuque-assets")
   ].filter(Boolean))
   for (const dir of candidates) {

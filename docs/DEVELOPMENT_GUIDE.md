@@ -2,7 +2,7 @@
 
 > **适用读者**：有一定编程基础，但这个项目主要由 AI 辅助完成，现在想搞清楚每一步是怎么做的开发者。
 >
-> **项目仓库**：[github.com/zhangzhengyang27/yuque-editor-core](https://github.com/zhangzhengyang27/yuque-editor-core)
+> **项目仓库**：[github.com/zhangzhengyang27/yuque-editor](https://github.com/zhangzhengyang27/yuque-editor)（包发布名为 `@zhangzhengyang27/yuque-editor-core`）
 >
 > **技术栈**：pnpm monorepo · TypeScript 5.x · React 18 · Vue 3 · Vite 6
 
@@ -26,7 +26,7 @@
 
 ### 这是什么项目？
 
-把**语雀（Yuque）的 Lake Editor**封装成一个独立的 npm 包（`yuque-editor-core`），支持离线资源、提供 React 18 和 Vue 3 组件，并在 Vue 示例中实现了完整的**评论系统**和**富文本回复编辑器**。
+把**语雀（Yuque）的 Lake Editor**封装成一个独立的 npm 包（`@zhangzhengyang27/yuque-editor-core`，monorepo 内部简称 `yuque-editor-core`），支持离线资源、提供 React 18 和 Vue 3 组件，并在 Vue 示例中实现了完整的**评论系统**和**富文本回复编辑器**。
 
 ### 整体架构
 
