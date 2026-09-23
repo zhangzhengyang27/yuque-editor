@@ -123,9 +123,9 @@ Vue 3：通过 `@error` 事件监听。
     // 返回 url（必填）、size（必填）、filename（可选）、cover（视频封面，可选）
     return { url: json.url, size: json.size, filename: json.filename }
   }}
-  uploadVideo={uploadToOss}   // slash 菜单「本地视频」
-  uploadFile={uploadToOss}    // slash 菜单「附件」「本地文件」
-  uploadAudio={uploadToOss}   // slash 菜单「本地音频」
+  uploadVideo={uploadToOss} // slash 菜单「本地视频」
+  uploadFile={uploadToOss} // slash 菜单「附件」「本地文件」
+  uploadAudio={uploadToOss} // slash 菜单「本地音频」
 />
 ```
 
