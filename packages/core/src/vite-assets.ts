@@ -69,23 +69,41 @@ function uniquePaths(paths: string[]): string[] {
 }
 
 /**
+ * 本包在 `node_modules` 下的目录名。发布名带 scope，两种安装方式都要能定位到资源：
+ * - 发布名安装：`@zhangzhengyang27/yuque-editor-core`
+ * - npm alias 成短名：`yuque-editor-core`
+ *
+ * 改动包名时需同步这里（或让使用方显式传 `assetsDir`）。
+ */
+const PACKAGE_DIR_NAMES = ["yuque-editor-core", "@zhangzhengyang27/yuque-editor-core"]
+
+/** 某个根目录下，各安装目录名对应的资源目录候选 */
+function nodeModulesAssetCandidates(root: string): string[] {
+  return PACKAGE_DIR_NAMES.flatMap((packageDir) => [
+    path.resolve(root, "node_modules", packageDir, "dist", "yuque-assets"),
+    path.resolve(root, "node_modules", packageDir, "assets", "yuque-assets"),
+  ])
+}
+
+/**
  * 定位本地离线资源目录。候选顺序（最多命中首个）：
  * 1. `YUQUE_ASSETS_DIR` 环境变量
  * 2. 包自带的 `assets/yuque-assets`（devDependencies 安装时存在）
- * 3. 使用方 node_modules 里的安装产物 `yuque-editor-core/{dist,assets}/yuque-assets`
+ * 3. 使用方 node_modules 里的安装产物 `<包目录名>/{dist,assets}/yuque-assets`
+ *    （同时覆盖带 scope 的发布名与 alias 短名）
  * 4. 围绕 searchRoot / cwd 的常见相对位置
+ *
+ * 导出仅供单测使用，不是公共 API。
  */
-async function findLocalAssetsDir(searchRoot: string): Promise<string> {
+export async function findLocalAssetsDir(searchRoot: string): Promise<string> {
   const envDir = process.env.YUQUE_ASSETS_DIR
   const cwd = process.cwd()
   const candidates = uniquePaths(
     [
       envDir ?? "",
       path.resolve(searchRoot, "assets/yuque-assets"),
-      path.resolve(searchRoot, "node_modules/yuque-editor-core/dist/yuque-assets"),
-      path.resolve(searchRoot, "node_modules/yuque-editor-core/assets/yuque-assets"),
-      path.resolve(cwd, "node_modules/yuque-editor-core/dist/yuque-assets"),
-      path.resolve(cwd, "node_modules/yuque-editor-core/assets/yuque-assets"),
+      ...nodeModulesAssetCandidates(searchRoot),
+      ...nodeModulesAssetCandidates(cwd),
       path.resolve(cwd, "assets/yuque-assets"),
     ].filter(Boolean),
   )
